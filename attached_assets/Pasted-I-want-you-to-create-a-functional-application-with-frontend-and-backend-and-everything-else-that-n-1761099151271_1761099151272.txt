@@ -1,0 +1,27 @@
+I want you to create a functional application, with frontend and backend, and everything else that needs to be integrated (database, Gmail authentication, access and security levels, etc.). It should be a qualitative and quantitative control application for the total number of military personnel in a Brazilian Army unit.
+
+The application should allow you to add or remove military personnel, change their role, company (cia), rank (P/G), status, mission, and more. In other words, there should be complete autonomy so that control is truly effective.
+
+The application will be created based on the data provided in the attached spreadsheet, and this will be the initial data for building the entire structure of the app.
+
+It should also be possible to create access levels, where some have permission only to consult, others can make limited changes, for example only within their company, and others have full permission to make any type of change and even assign user profiles, i.e., administrator function. For this, an administrator environment must also be created, which will make it possible to assign all these functions.
+
+The app should also be able to generate customized dashboards (similar to those in PowerBI), according to the items chosen by the user, such as: such as: list the nominal workforce and by function of a specific company or section; list the quantitative workforce divided by positions and ranks of a company; list the total workforce of officers, warrant officers, sergeants, corporals, or soldiers...; also allowing a view through graphs and comparative tables, which will also have the option to choose.
+
+Disregard the colors in the spreadsheet, pay attention only to the organization and data.
+
+
+
+Additional information
+
+1. You can choose, just give me the option to change it later if I want to.
+
+2. The organizational structure is as follows: there are the Companies (Cia): 1st Fuz Sl Company (1st Cia); 2nd Fuz Sl Company (2nd Cia); 3rd Fuz Sl Company (3rd Company); Special Border Company (CEF), which has the 1st PEF, 2nd PEF, 3rd PEF, 4th PEF, 5th PEF, and 6th PEF; Command and Support Company (CCAP) and Administrative Base (B ADM). These are the “base companies,” where military personnel are distributed. There are also sections/departments where some military personnel work, but belong to one of the companies mentioned above. The sections/departments are as follows: General Staff (EM); 1st Section (S1); 2nd Section (S2); 3rd Section (S3); 4th Section (S4); Administrative Oversight (Fisc Adm); Legal Advisory, Personnel Payment Section (SPP); Secretariat; Treasury; Salc; Warehouse; Document Compliance; Procurement; Health Section... among others.
+
+3. All must be created, even those that do not yet have data
+
+4. They can be personal accounts
+
+5. Access levels: User, Administrator, and Manager. You can create these, each with a lower to higher level of access. Example: the User level can only view the data, access it, without being able to change anything... while the Manager can do everything, as they are the one who determines the access levels at the time of registration.
+
+6. If possible, yes, in PDF and Excel.
