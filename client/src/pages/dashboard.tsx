@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { StatsCard } from "@/components/stats-card";
 import { BootstrapAdmin } from "@/components/bootstrap-admin";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Building2, Shield, Activity, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar, Scatter as ScatterIcon, Layers, CircleDot } from "lucide-react";
+import { Users, Building2, Shield, Activity, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar, Layers, CircleDot } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -86,7 +86,7 @@ const chartTypeIcons: Record<ChartType, any> = {
   line: TrendingUp,
   area: Circle,
   radar: Radar,
-  scatter: ScatterIcon,
+  scatter: Circle,
   composed: Layers,
   radialBar: CircleDot,
 };
