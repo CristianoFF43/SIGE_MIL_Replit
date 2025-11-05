@@ -86,12 +86,14 @@ app.use((req, res, next) => {
     console.log('[TEST MODE] Passport session configured with secure:', process.env.NODE_ENV === 'production');
   }
 
-  // Import initial data if needed
-  try {
-    const { importInitialData } = await import("./importData");
-    await importInitialData();
-  } catch (error) {
-    console.error("Error importing initial data:", error);
+  // Import initial data if needed (skip in production for faster startup)
+  if (process.env.NODE_ENV === 'development' && process.env.IMPORT_INITIAL_DATA !== 'false') {
+    try {
+      const { importInitialData } = await import("./importData");
+      await importInitialData();
+    } catch (error) {
+      console.error("Error importing initial data:", error);
+    }
   }
 
   const server = await registerRoutes(app);
