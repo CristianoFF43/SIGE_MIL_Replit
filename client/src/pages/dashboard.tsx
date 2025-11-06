@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { StatsCard } from "@/components/stats-card";
@@ -166,9 +167,8 @@ export default function Dashboard() {
   const { data: data1Response } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric1],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric1)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric1)}`);
+      return res.json();
     },
     enabled: isAuthenticated && !!metric1,
   });
@@ -176,9 +176,8 @@ export default function Dashboard() {
   const { data: data1CompareResponse } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric1Compare],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric1Compare)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric1Compare)}`);
+      return res.json();
     },
     enabled: isAuthenticated && compareMode1 && !!metric1Compare,
   });
@@ -186,9 +185,8 @@ export default function Dashboard() {
   const { data: data2Response } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric2],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric2)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric2)}`);
+      return res.json();
     },
     enabled: isAuthenticated && !!metric2,
   });
@@ -196,9 +194,8 @@ export default function Dashboard() {
   const { data: data2CompareResponse } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric2Compare],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric2Compare)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric2Compare)}`);
+      return res.json();
     },
     enabled: isAuthenticated && compareMode2 && !!metric2Compare,
   });
@@ -206,9 +203,8 @@ export default function Dashboard() {
   const { data: data3Response } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric3],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric3)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric3)}`);
+      return res.json();
     },
     enabled: isAuthenticated && !!metric3,
   });
@@ -216,9 +212,8 @@ export default function Dashboard() {
   const { data: data3CompareResponse } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric3Compare],
     queryFn: async () => {
-      const response = await fetch(`/api/stats/dynamic?field=${encodeURIComponent(metric3Compare)}`);
-      if (!response.ok) throw new Error("Failed to fetch dynamic stats");
-      return response.json();
+      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric3Compare)}`);
+      return res.json();
     },
     enabled: isAuthenticated && compareMode3 && !!metric3Compare,
   });

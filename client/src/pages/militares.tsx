@@ -447,7 +447,11 @@ export default function Militares() {
       updateMutation.mutate({ id, data: { customFields: updatedCustomFields } });
     } else {
       // Standard field update
-      updateMutation.mutate({ id, data: { [field]: value || null } });
+      let finalValue: any = value || null;
+      if (field === 'ord') {
+        finalValue = value && value.trim() !== '' ? parseInt(value, 10) : null;
+      }
+      updateMutation.mutate({ id, data: { [field]: finalValue } });
     }
   };
 
@@ -717,8 +721,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.companhia}
                         onSave={(val) => handleCellUpdate(militar.id, "companhia", val)}
-                        type="select"
-                        options={COMPANIES}
+                        placeholder="CIA"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="companhia"
@@ -763,8 +766,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.situacao}
                         onSave={(val) => handleCellUpdate(militar.id, "situacao", val)}
-                        type="select"
-                        options={STATUSES}
+                        placeholder="Situação"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="situacao"
@@ -783,8 +785,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.missaoOp}
                         onSave={(val) => handleCellUpdate(militar.id, "missaoOp", val)}
-                        type="select"
-                        options={MISSIONS}
+                        placeholder="Missão/Op"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="missaoOp"

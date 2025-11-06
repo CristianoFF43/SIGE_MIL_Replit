@@ -274,7 +274,7 @@ export default function Relatorios() {
     }
   };
 
-  const handleExport = (format: "excel" | "pdf") => {
+  const handleExport = async (format: "excel" | "pdf") => {
     // Constrói query string com filtros
     const params = new URLSearchParams();
     if (filters.companhia) params.append('companhia', filters.companhia);
@@ -285,14 +285,41 @@ export default function Relatorios() {
 
     const queryString = params.toString();
     const url = `/api/export/${format}${queryString ? `?${queryString}` : ''}`;
-    
-    // Abre URL em nova aba para download
-    window.open(url, '_blank');
-    
-    toast({
-      title: "Exportação iniciada",
-      description: `Gerando arquivo ${format.toUpperCase()} com ${filteredMilitares.length} militar(es)...`,
-    });
+
+    try {
+      // Usa apiRequest para incluir Authorization e baixar o arquivo
+      const res = await apiRequest("GET", url);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Falha ao exportar ${format.toUpperCase()}`);
+      }
+
+      const blob = await res.blob();
+      // Tenta extrair o nome do arquivo dos headers
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match ? match[1] : `relatorio.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+
+      const urlBlob = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = urlBlob;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(urlBlob);
+
+      toast({
+        title: "Exportação concluída",
+        description: `Arquivo ${filename} gerado com ${filteredMilitares.length} militar(es)`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro na exportação",
+        description: error.message || "Falha ao gerar arquivo",
+        variant: "destructive",
+      });
+    }
   };
 
   const clearFilters = () => {
