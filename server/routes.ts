@@ -475,7 +475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User Preferences routes
   app.get('/api/preferences/:preferenceKey', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = (req as any).user?.claims?.sub;
       const { preferenceKey } = req.params;
 
       const preference = await storage.getUserPreference(userId, preferenceKey);
@@ -492,7 +492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/preferences/:preferenceKey', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = (req as any).user?.claims?.sub;
       const { preferenceKey } = req.params;
       const { preferenceValue } = req.body;
 
@@ -506,7 +506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/preferences/:preferenceKey', isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = (req as any).user?.claims?.sub;
       const { preferenceKey } = req.params;
 
       await storage.deleteUserPreference(userId, preferenceKey);
