@@ -870,6 +870,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Reset all users (DB + Firebase Auth) - protected by secret
+  app.post('/api/admin/reset-users', async (req: any, res) => {
+    try {
+      const secretHeader = req.headers['x-reset-secret'];
+      const expectedSecret = process.env.RESET_ADMIN_SECRET;
+
+      if (!expectedSecret || secretHeader !== expectedSecret) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+
+      // Delete sessions table if exists
+      let sessionsDeleted = 0;
+      try {
+        const { db } = await import('./db');
+        const { sql } = await import('drizzle-orm');
+        // Attempt to delete sessions (ignore if table missing)
+        const result: any = await db.execute(sql`DELETE FROM sessions`);
+        sessionsDeleted = (result.rowCount || 0);
+      } catch {}
+
+      // Delete app users (cascade will remove related preferences/filters)
+      let usersDeleted = 0;
+      try {
+        const { db } = await import('./db');
+        const { sql } = await import('drizzle-orm');
+        const result: any = await db.execute(sql`DELETE FROM users`);
+        usersDeleted = (result.rowCount || 0);
+      } catch {}
+
+      // Delete Firebase Auth users
+      let firebaseDeleted = 0;
+      try {
+        const admin = (await import('firebase-admin')).default;
+        const listResult = await admin.auth().listUsers();
+        for (const u of listResult.users) {
+          await admin.auth().deleteUser(u.uid);
+          firebaseDeleted++;
+        }
+      } catch {}
+
+      return res.json({
+        ok: true,
+        sessionsDeleted,
+        usersDeleted,
+        firebaseDeleted,
+      });
+    } catch (error: any) {
+      console.error('[RESET USERS] Error:', error);
+      res.status(500).json({ ok: false, message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
