@@ -1,5 +1,5 @@
 import express, { type Request, type Response, type NextFunction } from "express";
-import { registerRoutes } from "./server/routes";
+import { registerRoutes } from "../server/routes";
 
 let app: express.Express | null = null;
 
@@ -18,11 +18,11 @@ async function buildApp() {
     const path = req.path;
     let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-    const originalResJson = res.json;
-    (res as any).json = function (bodyJson: any, ...args: any[]) {
+    const originalResJson = res.json.bind(res);
+    (res as any).json = ((bodyJson: any) => {
       capturedJsonResponse = bodyJson;
-      return originalResJson.apply(res, [bodyJson, ...args]);
-    } as any;
+      return originalResJson(bodyJson);
+    }) as any;
 
     res.on("finish", () => {
       const duration = Date.now() - start;
@@ -60,4 +60,3 @@ export default async function handler(req: Request, res: Response) {
   }
   (app as any)(req, res);
 }
-
