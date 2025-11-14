@@ -16,18 +16,31 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
+import { Pool as PgPool } from 'pg';
 import ws from "ws";
 import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+const supabaseUrl = process.env.SUPABASE_DATABASE_URL;
+const databaseUrl = supabaseUrl || process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+let pool: any;
+let db: any;
+
+if (supabaseUrl) {
+  const { drizzle: drizzlePg } = await import('drizzle-orm/node-postgres');
+  pool = new PgPool({ connectionString: databaseUrl });
+  db = drizzlePg(pool, { schema });
+} else {
+  const { drizzle: drizzleNeon } = await import('drizzle-orm/neon-serverless');
+  pool = new NeonPool({ connectionString: databaseUrl });
+  db = drizzleNeon({ client: pool, schema });
+}
+
+export { pool, db };

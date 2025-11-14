@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import { firebaseAuth, requirePermission } from "./firebaseAuth";
 import multer from 'multer';
 import path from 'path';
@@ -23,6 +25,16 @@ import { simpleFiltersToTree } from "./filterBuilder";
 const isAuthenticated = firebaseAuth;
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.get('/api/health/db', async (_req, res) => {
+    try {
+      await db.execute(sql`select 1`);
+      const result: any = await db.execute(sql`select table_name from information_schema.tables where table_schema = 'public' and table_name in ('users','military_personnel','custom_field_definitions','saved_filter_groups')`);
+      const tables = (result.rows || result)?.map((r: any) => r.table_name) || [];
+      res.json({ ok: true, tables });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, message: error.message });
+    }
+  });
   // No additional auth setup needed - Firebase Auth is stateless
   // Setup file upload (in-memory)
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
