@@ -97,15 +97,11 @@ export async function validateAndNormalizeCustomFields(
   if (!customFields) {
     customFields = {};
   }
-  
-  // Fetch custom field definitions if not provided (to maintain backward compatibility)
-  if (!definitions) {
-    definitions = await db.select().from(customFieldDefinitions);
-  }
+  const defs = definitions ?? await db.select().from(customFieldDefinitions);
   const normalized: Record<string, any> = {};
   const errors: string[] = [];
   
-  for (const def of definitions) {
+  for (const def of defs) {
     const rawValue = customFields[def.name];
     
     // Normalize empty values: trim strings and treat empty as null
@@ -204,8 +200,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users);
-    // Normalize permissions for all users
-    return allUsers.map(user => {
+    return allUsers.map((user: User) => {
       if (user.permissions && typeof user.permissions === "string") {
         try {
           user.permissions = JSON.parse(user.permissions as string);

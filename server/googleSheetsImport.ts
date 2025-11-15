@@ -194,7 +194,7 @@ export async function importFromGoogleSheets(spreadsheetId: string, sheetName: s
     // Se falhar no meio, nada é perdido (rollback automático)
     console.log('Starting database transaction...');
     
-    const imported = await db.transaction(async (tx) => {
+    const imported = await db.transaction(async (tx: any) => {
       // 1. Limpa dados existentes dentro da transação
       console.log('Clearing existing military personnel data...');
       await tx.delete(militaryPersonnel);
