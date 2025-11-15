@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import * as XLSX from 'xlsx';
 import { db } from "./db";
-import { militaryPersonnel, customFieldDefinitions } from "@shared/schema";
+import { militaryPersonnel, customFieldDefinitions, type CustomFieldDefinition } from "@shared/schema";
 import { validateAndNormalizeCustomFields } from "./storage";
 
 let connectionSettings: any;
@@ -316,7 +316,7 @@ export async function importFromExcelFile(fileId: string) {
     if (customFields.length > 0) {
       console.log('🔧 Ensuring custom field definitions exist...');
       const existingDefs = await db.select().from(customFieldDefinitions);
-      const existingNames = new Set(existingDefs.map((d: CustomFieldDefinition) => d.name));
+      const existingNames = new Set(existingDefs.map((d) => d.name));
       let orderIndex = existingDefs.length;
 
       for (const field of customFields) {
@@ -340,7 +340,7 @@ export async function importFromExcelFile(fileId: string) {
     // Se falhar no meio, nada é perdido (rollback automático)
     console.log('🔒 Starting database transaction...');
 
-    const imported = await db.transaction(async (tx: any) => {
+    const imported = await db.transaction(async (tx) => {
       // 1. Limpa dados existentes dentro da transação
       console.log('🗑️  Clearing existing military personnel data...');
       await tx.delete(militaryPersonnel);
@@ -456,7 +456,7 @@ export async function importFromBuffer(buffer: Buffer) {
     if (customFields.length > 0) {
       console.log('🔧 Ensuring custom field definitions exist...');
       const existingDefs = await db.select().from(customFieldDefinitions);
-      const existingNames = new Set(existingDefs.map(d => d.name));
+      const existingNames = new Set(existingDefs.map((d: CustomFieldDefinition) => d.name));
       let orderIndex = existingDefs.length;
 
       for (const field of customFields) {
@@ -479,7 +479,7 @@ export async function importFromBuffer(buffer: Buffer) {
     // IMPORTANTE: Usa transação para garantir atomicidade
     console.log('🔒 Starting database transaction...');
 
-    const imported = await db.transaction(async (tx) => {
+    const imported = await db.transaction(async (tx: any) => {
       // 1. Limpa dados existentes
       console.log('🗑️  Clearing existing military personnel data...');
       await tx.delete(militaryPersonnel);

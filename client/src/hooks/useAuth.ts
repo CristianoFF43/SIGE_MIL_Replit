@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useAuth as useFirebaseAuth } from "@/contexts/AuthContext";
+import { useFirebaseAuth } from "@/contexts/AuthContext";
 import type { User } from "@shared/schema";
 import { DEFAULT_PERMISSIONS } from "@shared/schema";
 

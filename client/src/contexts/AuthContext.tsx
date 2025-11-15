@@ -15,7 +15,7 @@ const AuthContext = createContext<AuthContextType>({
   idToken: null,
 });
 
-export function useAuth() {
+export function useFirebaseAuth() {
   return useContext(AuthContext);
 }
 

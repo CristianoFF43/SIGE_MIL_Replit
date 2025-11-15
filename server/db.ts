@@ -17,8 +17,10 @@ if (!process.env.DATABASE_URL) {
 }
 
 import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
-import { Pool as PgPool } from 'pg';
+import pg from 'pg';
 import ws from "ws";
+
+const { Pool: PgPool } = pg;
 import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
