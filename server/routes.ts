@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { firebaseAuth, requirePermission } from "./firebaseAuth";
-// Multer import moved to dynamic loading within upload routes to avoid bundler issues
+import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import { 
@@ -36,8 +36,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   // No additional auth setup needed - Firebase Auth is stateless
-  // Setup file upload (in-memory) using dynamic import to play nicely with serverless bundlers
-  const { default: multer } = await import('multer');
+  // Setup file upload (in-memory) 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
   // Auth routes
