@@ -122,7 +122,7 @@ function getRankOrder(rank: string): number {
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, user, isAdmin } = useAuth();
-  
+
   // Estado para seleção de gráficos
   const [chartType1, setChartType1] = useState<ChartType>("bar");
   const [chartType2, setChartType2] = useState<ChartType>("pie");
@@ -600,10 +600,8 @@ export default function Dashboard() {
               endAngle={-270}
             >
               <RadialBar
-                minAngle={15}
                 label={{ position: 'insideStart', fill: '#fff', fontSize: 12 }}
                 background
-                clockWise
                 dataKey="value"
               />
               <Legend

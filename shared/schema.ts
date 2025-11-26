@@ -257,22 +257,24 @@ export const filterGroupSchema: z.ZodType<FilterGroup> = z.lazy(() =>
 );
 
 // Filter tree is just a FilterGroup (top level)
-export const filterTreeSchema = filterGroupSchema;
+export const filterTreeSchema: z.ZodType<FilterGroup> = filterGroupSchema;
 export type FilterTree = FilterGroup;
 
 // Saved filter groups table
 export const savedFilterGroups = pgTable("saved_filter_groups", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
   ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   scope: varchar("scope", { length: 20 }).notNull().default("personal"), // 'personal' or 'shared'
-  filterTree: jsonb("filter_tree").notNull().$type<FilterTree>(),
+  filterTree: jsonb("filter_tree").notNull().$type<any>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertSavedFilterGroupSchema = createInsertSchema(savedFilterGroups, {
   name: z.string().min(1, "Nome do filtro é obrigatório").max(200),
+  description: z.string().optional(),
   scope: z.enum(["personal", "shared"]),
   filterTree: filterTreeSchema,
 }).omit({

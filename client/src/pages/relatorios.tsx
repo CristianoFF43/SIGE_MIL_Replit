@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,7 +125,7 @@ export default function Relatorios() {
   // Preparar dados baseado na métrica selecionada
   const getChartDataForMetric = (selectedMetric: DataMetric) => {
     const dataMap: Record<string, number> = {};
-    
+
     filteredMilitares.forEach((militar) => {
       let key: string;
       switch (selectedMetric) {
@@ -143,7 +144,7 @@ export default function Relatorios() {
       }
       dataMap[key] = (dataMap[key] || 0) + 1;
     });
-    
+
     return Object.entries(dataMap).map(([name, value]) => ({
       name,
       value,
@@ -179,7 +180,7 @@ export default function Relatorios() {
             </BarChart>
           </ResponsiveContainer>
         );
-      
+
       case "pie":
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -208,7 +209,7 @@ export default function Relatorios() {
             </PieChart>
           </ResponsiveContainer>
         );
-      
+
       case "line":
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -228,7 +229,7 @@ export default function Relatorios() {
             </LineChart>
           </ResponsiveContainer>
         );
-      
+
       case "area":
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -248,7 +249,7 @@ export default function Relatorios() {
             </AreaChart>
           </ResponsiveContainer>
         );
-      
+
       case "radar":
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -268,7 +269,7 @@ export default function Relatorios() {
             </RadarChart>
           </ResponsiveContainer>
         );
-      
+
       default:
         return null;
     }
@@ -357,7 +358,7 @@ export default function Relatorios() {
             )}
           </div>
           <CardDescription>
-            Aplique filtros para refinar os dados antes de exportar. 
+            Aplique filtros para refinar os dados antes de exportar.
             <strong className="text-foreground"> {filteredMilitares.length} militar(es) selecionado(s)</strong>
           </CardDescription>
         </CardHeader>
@@ -365,7 +366,7 @@ export default function Relatorios() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Companhia</label>
-              <Select value={filters.companhia} onValueChange={(value) => setFilters({...filters, companhia: value === "all" ? "" : value})}>
+              <Select value={filters.companhia} onValueChange={(value) => setFilters({ ...filters, companhia: value === "all" ? "" : value })}>
                 <SelectTrigger data-testid="select-companhia-filter">
                   <SelectValue placeholder="Todas as companhias" />
                 </SelectTrigger>
@@ -380,7 +381,7 @@ export default function Relatorios() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Posto/Graduação</label>
-              <Select value={filters.posto} onValueChange={(value) => setFilters({...filters, posto: value === "all" ? "" : value})}>
+              <Select value={filters.posto} onValueChange={(value) => setFilters({ ...filters, posto: value === "all" ? "" : value })}>
                 <SelectTrigger data-testid="select-posto-filter">
                   <SelectValue placeholder="Todos os postos" />
                 </SelectTrigger>
@@ -395,7 +396,7 @@ export default function Relatorios() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Situação</label>
-              <Select value={filters.situacao} onValueChange={(value) => setFilters({...filters, situacao: value === "all" ? "" : value})}>
+              <Select value={filters.situacao} onValueChange={(value) => setFilters({ ...filters, situacao: value === "all" ? "" : value })}>
                 <SelectTrigger data-testid="select-situacao-filter">
                   <SelectValue placeholder="Todas as situações" />
                 </SelectTrigger>
@@ -410,7 +411,7 @@ export default function Relatorios() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Missão</label>
-              <Select value={filters.missaoOp} onValueChange={(value) => setFilters({...filters, missaoOp: value === "all" ? "" : value})}>
+              <Select value={filters.missaoOp} onValueChange={(value) => setFilters({ ...filters, missaoOp: value === "all" ? "" : value })}>
                 <SelectTrigger data-testid="select-missao-filter">
                   <SelectValue placeholder="Todas as missões" />
                 </SelectTrigger>
@@ -428,7 +429,7 @@ export default function Relatorios() {
               <Input
                 placeholder="Digite nome, CPF ou identidade..."
                 value={filters.search}
-                onChange={(e) => setFilters({...filters, search: e.target.value})}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 data-testid="input-search-filter"
               />
             </div>
@@ -469,13 +470,13 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Gera arquivo Excel (.xlsx) com formatação profissional, incluindo todos os campos: 
+              Gera arquivo Excel (.xlsx) com formatação profissional, incluindo todos os campos:
               ORD, P/GRAD, nome completo, companhia, função, situação, missão, CPF, telefone e email.
             </p>
-            <Button 
-              variant="default" 
-              className="w-full" 
-              onClick={() => handleExport("excel")} 
+            <Button
+              variant="default"
+              className="w-full"
+              onClick={() => handleExport("excel")}
               data-testid="button-export-excel"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -496,13 +497,13 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Gera relatório PDF com formatação militar profissional, incluindo cabeçalho do 
+              Gera relatório PDF com formatação militar profissional, incluindo cabeçalho do
               Exército Brasileiro, 7º BIS, data/hora do relatório e tabela formatada.
             </p>
-            <Button 
-              variant="default" 
-              className="w-full" 
-              onClick={() => handleExport("pdf")} 
+            <Button
+              variant="default"
+              className="w-full"
+              onClick={() => handleExport("pdf")}
               data-testid="button-export-pdf"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -521,7 +522,7 @@ export default function Relatorios() {
               <CardDescription>Visualização dos dados filtrados</CardDescription>
             </div>
           </div>
-          
+
           <div className="flex flex-wrap gap-3 pt-4">
             <div className="flex-1 min-w-[180px]">
               <label className="text-sm font-medium mb-2 block">Tipo de Gráfico</label>

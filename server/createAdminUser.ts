@@ -33,6 +33,7 @@ if (result.error) {
 import { db } from "./db";
 import { users } from "@shared/schema";
 import { DEFAULT_PERMISSIONS } from "@shared/schema";
+import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
 async function createAdminUser() {
@@ -45,7 +46,7 @@ async function createAdminUser() {
     // Verificar se já existe algum administrador
     const existingAdmins = await db.select()
       .from(users)
-      .where((users) => users.role === "administrator")
+      .where(eq(users.role, "administrator"))
       .limit(1);
 
     if (existingAdmins.length > 0) {

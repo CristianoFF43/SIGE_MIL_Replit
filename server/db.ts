@@ -1,7 +1,7 @@
 // Carrega variáveis de ambiente se ainda não foram carregadas
 if (!process.env.DATABASE_URL) {
   try {
-    const { config } = await import('dotenv');
+    const dotenv = await import('dotenv');
     const { resolve } = await import('path');
     const { fileURLToPath } = await import('url');
     const { dirname } = await import('path');
@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
     const __dirname = dirname(__filename);
     const envPath = resolve(__dirname, '..', '.env');
 
-    config({ path: envPath });
+    dotenv.config({ path: envPath });
   } catch (error) {
     // Silenciosamente ignora se dotenv não estiver disponível
   }

@@ -22,16 +22,16 @@ import Relatorios from "@/pages/relatorios";
 import Admin from "@/pages/admin";
 
 function Router() {
-  const { user, loading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
-  console.log("[ROUTER] Rendering. Loading:", loading, "User:", user ? user.email : "null");
+  console.log("[ROUTER] Rendering. Loading:", isLoading, "User:", user ? (user as any).email : "null");
 
-  if (loading) {
+  if (isLoading) {
     console.log("[ROUTER] Showing loading screen");
     return (
       <div className="min-h-screen flex items-center justify-center">

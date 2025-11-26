@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Building2, Users, Shield, GripVertical, RotateCcw } from "lucide-react";
-import type { MilitaryPersonnel } from "@shared/schema";
+import type { MilitaryPersonnel, UserPreference } from "@shared/schema";
 import { COMPANIES } from "@shared/schema";
 import {
   DndContext,
@@ -193,7 +193,7 @@ export default function Companhias() {
   });
 
   // Fetch saved card order preference
-  const { data: savedPreference } = useQuery({
+  const { data: savedPreference } = useQuery<UserPreference>({
     queryKey: ["/api/preferences/companhias_card_order"],
     enabled: isAuthenticated && !!user,
   });
