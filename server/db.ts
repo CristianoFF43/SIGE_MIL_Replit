@@ -25,17 +25,18 @@ import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-const supabaseUrl = process.env.SUPABASE_DATABASE_URL;
-const databaseUrl = supabaseUrl || process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL || process.env.SUPABASE_DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
 }
 
+const isSupabase = databaseUrl.includes('supabase') || !!process.env.SUPABASE_DATABASE_URL;
+
 let pool: any;
 let db: any;
 
-if (supabaseUrl) {
+if (isSupabase) {
   const { drizzle: drizzlePg } = await import('drizzle-orm/node-postgres');
   pool = new PgPool({ connectionString: databaseUrl });
   db = drizzlePg(pool, { schema });
