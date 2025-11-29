@@ -38,7 +38,10 @@ let db: any;
 
 if (isSupabase) {
   const { drizzle: drizzlePg } = await import('drizzle-orm/node-postgres');
-  pool = new PgPool({ connectionString: databaseUrl });
+  pool = new PgPool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false }
+  });
   db = drizzlePg(pool, { schema });
 } else {
   const { drizzle: drizzleNeon } = await import('drizzle-orm/neon-serverless');
