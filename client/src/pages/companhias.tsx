@@ -80,8 +80,64 @@ interface CompanyData {
   rankCounts: Record<string, number>;
 }
 
-interface SortableCardProps {
+interface CompanyCardProps {
   company: CompanyData;
+  isOverlay?: boolean;
+  className?: string;
+  dragHandle?: React.ReactNode;
+}
+
+function CompanyCard({ company, isOverlay, className, dragHandle }: CompanyCardProps) {
+  return (
+    <Card className={`hover-elevate ${isOverlay ? 'shadow-2xl cursor-grabbing' : ''} ${className || ''}`}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {dragHandle}
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              {company.name}
+            </CardTitle>
+          </div>
+          <Badge variant="default" className="font-mono">
+            {company.total}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Shield className="h-4 w-4" />
+              <span>Pronto</span>
+            </div>
+            <div className="text-2xl font-bold text-primary">{company.prontos}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>Não Pronto</span>
+            </div>
+            <div className="text-2xl font-bold">{company.naoProntos}</div>
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <p className="text-sm font-medium mb-2">Distribuição por Posto/Graduação</p>
+          <div className="space-y-2">
+            {Object.entries(company.rankCounts)
+              .sort(([rankA], [rankB]) => getRankOrder(rankA) - getRankOrder(rankB))
+              .map(([rank, count]) => (
+                <div key={rank} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{rank}</span>
+                  <Badge variant="outline">{count}</Badge>
+                </div>
+              ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function SortableCard({ company }: SortableCardProps) {
@@ -100,62 +156,19 @@ function SortableCard({ company }: SortableCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const DragHandle = (
+    <div
+      {...attributes}
+      {...listeners}
+      className="cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-accent rounded"
+    >
+      <GripVertical className="h-5 w-5 text-muted-foreground" />
+    </div>
+  );
+
   return (
     <div ref={setNodeRef} style={style}>
-      <Card className="hover-elevate">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div
-                {...attributes}
-                {...listeners}
-                className="cursor-grab active:cursor-grabbing touch-none p-1 hover:bg-accent rounded"
-              >
-                <GripVertical className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-primary" />
-                {company.name}
-              </CardTitle>
-            </div>
-            <Badge variant="default" className="font-mono">
-              {company.total}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Shield className="h-4 w-4" />
-                <span>Pronto</span>
-              </div>
-              <div className="text-2xl font-bold text-primary">{company.prontos}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>Não Pronto</span>
-              </div>
-              <div className="text-2xl font-bold">{company.naoProntos}</div>
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium mb-2">Distribuição por Posto/Graduação</p>
-            <div className="space-y-2">
-              {Object.entries(company.rankCounts)
-                .sort(([rankA], [rankB]) => getRankOrder(rankA) - getRankOrder(rankB))
-                .map(([rank, count]) => (
-                  <div key={rank} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{rank}</span>
-                    <Badge variant="outline">{count}</Badge>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <CompanyCard company={company} dragHandle={DragHandle} />
     </div>
   );
 }
@@ -304,6 +317,19 @@ export default function Companhias() {
     }
   }, [militares, savedPreference]);
 
+  // Calculate Total Data
+  const totalData: CompanyData = {
+    id: "TOTAL",
+    name: "EFETIVO TOTAL",
+    total: militares.length,
+    prontos: militares.filter(m => m.situacao === "Pronto").length,
+    naoProntos: militares.filter(m => m.situacao !== "Pronto").length,
+    rankCounts: militares.reduce((acc, m) => {
+      acc[m.postoGraduacao] = (acc[m.postoGraduacao] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>)
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
@@ -363,6 +389,12 @@ export default function Companhias() {
           strategy={verticalListSortingStrategy}
         >
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* Total Card - Fixed at the top */}
+            <CompanyCard
+              company={totalData}
+              className="border-2 border-primary/20 bg-primary/5"
+            />
+
             {companies.map((company) => (
               <SortableCard key={company.id} company={company} />
             ))}
