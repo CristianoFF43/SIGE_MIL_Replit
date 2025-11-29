@@ -296,8 +296,23 @@ export default function Companhias() {
       })
       .filter(company => company.total > 0);
 
-    // Adicionar card PEF no início
-    const allCompaniesData = pefData ? [pefData, ...companiesData] : companiesData;
+    // Calculate Total Data
+    const totalData: CompanyData = {
+      id: "TOTAL",
+      name: "EFETIVO TOTAL",
+      total: militares.length,
+      prontos: militares.filter(m => m.situacao === "Pronto").length,
+      naoProntos: militares.filter(m => m.situacao !== "Pronto").length,
+      rankCounts: militares.reduce((acc, m) => {
+        acc[m.postoGraduacao] = (acc[m.postoGraduacao] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+
+    // Adicionar card PEF no início e TOTAL
+    const allCompaniesData = pefData
+      ? [totalData, pefData, ...companiesData]
+      : [totalData, ...companiesData];
 
     // Apply saved order if exists
     if (savedPreference && savedPreference.preferenceValue) {
@@ -316,19 +331,6 @@ export default function Companhias() {
       setCompanies(allCompaniesData);
     }
   }, [militares, savedPreference]);
-
-  // Calculate Total Data
-  const totalData: CompanyData = {
-    id: "TOTAL",
-    name: "EFETIVO TOTAL",
-    total: militares.length,
-    prontos: militares.filter(m => m.situacao === "Pronto").length,
-    naoProntos: militares.filter(m => m.situacao !== "Pronto").length,
-    rankCounts: militares.reduce((acc, m) => {
-      acc[m.postoGraduacao] = (acc[m.postoGraduacao] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>)
-  };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -389,12 +391,6 @@ export default function Companhias() {
           strategy={verticalListSortingStrategy}
         >
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {/* Total Card - Fixed at the top */}
-            <CompanyCard
-              company={totalData}
-              className="border-2 border-primary/20 bg-primary/5"
-            />
-
             {companies.map((company) => (
               <SortableCard key={company.id} company={company} />
             ))}
