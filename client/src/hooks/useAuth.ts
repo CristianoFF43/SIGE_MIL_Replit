@@ -6,11 +6,18 @@ import { DEFAULT_PERMISSIONS } from "@shared/schema";
 export function useAuth() {
   const { user: firebaseUser, loading: firebaseLoading, idToken } = useFirebaseAuth();
 
-  const { data: user, isLoading: userDataLoading } = useQuery<User>({
+  const { data: user, isLoading: userDataLoading, error: queryError } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     enabled: !!firebaseUser && !!idToken,
     retry: false,
   });
+
+  if (firebaseLoading) console.log("[useAuth] Firebase loading...");
+  if (firebaseUser) console.log("[useAuth] Firebase User:", firebaseUser.email);
+  if (idToken) console.log("[useAuth] ID Token present");
+  if (userDataLoading) console.log("[useAuth] Fetching DB user...");
+  if (user) console.log("[useAuth] DB User found:", user.email);
+  if (queryError) console.error("[useAuth] Query Error:", queryError);
 
   const hasPermission = (section: string, action: string): boolean => {
     if (!user) return false;

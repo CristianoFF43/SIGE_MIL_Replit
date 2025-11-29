@@ -38,9 +38,7 @@ export default function LoginPage() {
       });
 
       // Força um recarregamento para garantir que o estado de autenticação seja atualizado
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 500);
+      setLocation("/");
     } catch (error: any) {
       console.error("Erro no login:", error);
       toast({
@@ -88,9 +86,7 @@ export default function LoginPage() {
       });
 
       // Força um recarregamento para garantir que o estado de autenticação seja atualizado
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 500);
+      setLocation("/");
     } catch (error: any) {
       console.error("Erro no login:", error);
       toast({
@@ -147,9 +143,7 @@ export default function LoginPage() {
       });
 
       // Força um recarregamento para garantir que o estado de autenticação seja atualizado
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 500);
+      setLocation("/");
     } catch (error: any) {
       console.error("Erro no registro:", error);
       toast({
