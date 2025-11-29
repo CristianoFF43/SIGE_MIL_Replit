@@ -135,7 +135,11 @@ export const requirePermission = (section: string, action: string): RequestHandl
         return res.status(401).json({ message: "User not found" });
       }
 
+      console.log(`[PERMISSION CHECK] User: ${user.email}, Role: ${user.role}, Section: ${section}, Action: ${action}`);
+      // console.log(`[PERMISSION CHECK] Permissions:`, JSON.stringify(user.permissions, null, 2));
+
       if (!user.permissions || typeof user.permissions !== 'object') {
+        console.log(`[PERMISSION CHECK] FAILED: No permissions object`);
         return res.status(403).json({
           message: `Forbidden - No permissions configured`
         });
@@ -143,6 +147,8 @@ export const requirePermission = (section: string, action: string): RequestHandl
 
       const sectionPerms = (user.permissions as any)[section];
       if (!sectionPerms || !sectionPerms[action]) {
+        console.log(`[PERMISSION CHECK] FAILED: Missing ${section}.${action}`);
+        console.log(`[PERMISSION CHECK] Available for ${section}:`, sectionPerms);
         return res.status(403).json({
           message: `Forbidden - Requires ${section}.${action} permission`
         });
