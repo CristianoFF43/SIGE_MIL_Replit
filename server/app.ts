@@ -32,18 +32,17 @@ export async function createApp() {
 
         res.on("finish", () => {
             const duration = Date.now() - start;
-            if (path.startsWith("/api")) {
-                let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-                if (capturedJsonResponse) {
-                    logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-                }
-
-                if (logLine.length > 80) {
-                    logLine = logLine.slice(0, 79) + "…";
-                }
-
-                log(logLine);
+            // Log ALL requests to debug Vercel routing
+            let logLine = `[${req.method}] ${req.url} (original: ${req.originalUrl}) ${res.statusCode} in ${duration}ms`;
+            if (capturedJsonResponse) {
+                logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
             }
+
+            if (logLine.length > 200) {
+                logLine = logLine.slice(0, 199) + "…";
+            }
+
+            log(logLine);
         });
 
         next();
