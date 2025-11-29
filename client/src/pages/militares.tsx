@@ -100,12 +100,12 @@ function EditableCell({
   const [editValue, setEditValue] = useState(value?.toString() || "");
   const [error, setError] = useState("");
   const { toast } = useToast();
-  
+
   const isSaving = savingMilitarId?.id === militarId && savingMilitarId?.field === fieldName;
 
   const validateField = (val: string): boolean => {
     if (!val || val.trim() === "") return true; // Empty is ok for optional fields
-    
+
     switch (fieldType) {
       case "cpf":
         // Remove apenas formatação permitida (. - espaços)
@@ -260,7 +260,7 @@ export default function Militares() {
   }, [isAuthenticated, authLoading, toast]);
 
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
-    queryKey: filterTree 
+    queryKey: filterTree
       ? [`/api/militares?filter_tree=${encodeURIComponent(JSON.stringify(filterTree))}`]
       : ["/api/militares"],
     enabled: isAuthenticated,
@@ -395,10 +395,10 @@ export default function Militares() {
 
   const handleCellUpdate = (id: number, field: keyof MilitaryPersonnel | string, value: string) => {
     setSavingCell({ id, field: field as string });
-    
+
     // Check if it's a custom field
     const customField = customFields.find(cf => cf.name === field);
-    
+
     if (customField) {
       // Validate required fields on frontend (quick feedback)
       if (customField.required === 1 && (!value || value.trim() === '')) {
@@ -410,7 +410,7 @@ export default function Militares() {
         setSavingCell(null);
         return;
       }
-      
+
       // Type-specific validation
       if (customField.fieldType === 'number' && value && value.trim() !== '') {
         const numValue = parseFloat(value);
@@ -424,7 +424,7 @@ export default function Militares() {
           return;
         }
       }
-      
+
       if (customField.fieldType === 'select' && value && customField.options) {
         if (!customField.options.includes(value)) {
           toast({
@@ -436,7 +436,7 @@ export default function Militares() {
           return;
         }
       }
-      
+
       // Update custom field in customFields JSONB column
       const militar = militares.find(m => m.id === id);
       const currentCustomFields = (militar?.customFields as Record<string, any>) || {};
@@ -517,7 +517,7 @@ export default function Militares() {
             data-testid="input-search"
           />
         </div>
-        
+
         <Select value={filterCompany} onValueChange={setFilterCompany}>
           <SelectTrigger className="w-full sm:w-[180px]" data-testid="select-company">
             <SelectValue placeholder="Companhia" />
@@ -614,7 +614,7 @@ export default function Militares() {
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
           <p className="font-medium text-primary mb-1">💡 Modo de Edição Ativo</p>
           <p className="text-muted-foreground">
-            Clique em qualquer célula para editar. Pressione Enter para salvar ou Esc para cancelar. 
+            Clique em qualquer célula para editar. Pressione Enter para salvar ou Esc para cancelar.
             As alterações são salvas automaticamente.
           </p>
         </div>
@@ -636,6 +636,7 @@ export default function Militares() {
               <TableHead className="min-w-[130px]">CPF</TableHead>
               <TableHead className="min-w-[130px]">Telefone</TableHead>
               <TableHead className="min-w-[200px]">Email</TableHead>
+              <TableHead className="min-w-[100px]">TEMP</TableHead>
               {customFields.map((field) => (
                 <TableHead key={field.id} className="min-w-[150px]">
                   {field.label}
@@ -668,7 +669,7 @@ export default function Militares() {
                       militar.ord
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -684,7 +685,7 @@ export default function Militares() {
                       <span className="font-medium">{militar.nomeCompleto}</span>
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -699,7 +700,7 @@ export default function Militares() {
                       militar.nomeGuerra || "-"
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -715,7 +716,7 @@ export default function Militares() {
                       <Badge variant="outline">{militar.postoGraduacao}</Badge>
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -730,7 +731,7 @@ export default function Militares() {
                       <Badge variant="secondary">{militar.companhia}</Badge>
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -745,7 +746,7 @@ export default function Militares() {
                       militar.secaoFracao || "-"
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -760,7 +761,7 @@ export default function Militares() {
                       militar.funcao || "-"
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -779,7 +780,7 @@ export default function Militares() {
                       )
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -791,27 +792,10 @@ export default function Militares() {
                         fieldName="missaoOp"
                       />
                     ) : (
-                      militar.missaoOp || "-"
-                    )}
-                  </TableCell>
-                  
-                  <TableCell>
-                    {isManager ? (
-                      <EditableCell
-                        value={militar.cpf}
-                        onSave={(val) => handleCellUpdate(militar.id, "cpf", val)}
-                        placeholder="000.000.000-00"
-                        className="font-mono text-sm"
-                        fieldType="cpf"
-                        militarId={militar.id}
-                        savingMilitarId={savingCell}
-                        fieldName="cpf"
-                      />
-                    ) : (
                       <span className="font-mono text-sm">{formatCPF(militar.cpf)}</span>
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -828,7 +812,7 @@ export default function Militares() {
                       <span className="font-mono text-sm">{formatPhone(militar.telefoneContato1)}</span>
                     )}
                   </TableCell>
-                  
+
                   <TableCell>
                     {isManager ? (
                       <EditableCell
@@ -844,11 +828,11 @@ export default function Militares() {
                       militar.email || "-"
                     )}
                   </TableCell>
-                  
+
                   {customFields.map((field) => {
                     const customFieldsData = (militar.customFields as Record<string, any>) || {};
                     const fieldValue = customFieldsData[field.name];
-                    
+
                     return (
                       <TableCell key={field.id}>
                         {isManager ? (
@@ -868,7 +852,7 @@ export default function Militares() {
                       </TableCell>
                     );
                   })}
-                  
+
                   {isAdmin && (
                     <TableCell>
                       <Button

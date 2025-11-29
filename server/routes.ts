@@ -769,7 +769,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Gera arquivo PDF
       const { generatePDF } = await import('./exportService');
-      const pdfBuffer = generatePDF(militares, customFields, columns as string[]);
+      const localTime = req.query.localTime as string | undefined;
+      const pdfBuffer = generatePDF(militares, customFields, columns as string[], localTime);
 
       // Define headers para download
       const fileName = `efetivo_militar_${new Date().toISOString().split('T')[0]}.pdf`;

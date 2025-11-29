@@ -144,6 +144,7 @@ export const militaryPersonnel = pgTable("military_personnel", {
   telefoneContato2: varchar("telefone_contato_2", { length: 20 }), // Phone 2
   email: varchar("email", { length: 200 }), // Email
   observacoes: text("observacoes"), // Observations/Notes
+  temp: varchar("temp", { length: 10 }), // TEMP (SIM/NÃO)
   customFields: jsonb("custom_fields"), // Dynamic custom fields (Excel-like)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -155,6 +156,7 @@ export const insertMilitaryPersonnelSchema = createInsertSchema(militaryPersonne
   companhia: z.string().min(1, "Companhia é obrigatória"),
   cpf: z.string().optional().nullable(),
   email: z.string().email("Email inválido").optional().nullable().or(z.literal("")),
+  temp: z.enum(["SIM", "NÃO"]).optional().nullable(),
 }).omit({
   id: true,
   createdAt: true,
@@ -225,6 +227,7 @@ export const filterableFields = [
   "cpf",
   "identidade",
   "ord",
+  "temp",
 ] as const;
 
 // Define filter condition (leaf node)

@@ -74,7 +74,7 @@ const chartTypeIcons: Record<ChartType, any> = {
 const AVAILABLE_COLUMNS = [
   { id: 'ORD', label: 'Ordem' },
   { id: 'P/GRAD', label: 'Posto/Graduação' },
-  { id: 'ARMA/QUADRO/SERV', label: 'Arma/Quadro/Serviço' },
+  { id: 'A/Q/S', label: 'A/Q/S' },
   { id: 'NOME COMPLETO', label: 'Nome Completo' },
   { id: 'NOME GUERRA', label: 'Nome de Guerra' },
   { id: 'CIA', label: 'Companhia' },
@@ -87,6 +87,7 @@ const AVAILABLE_COLUMNS = [
   { id: 'CPF', label: 'CPF' },
   { id: 'TELEFONE', label: 'Telefone' },
   { id: 'EMAIL', label: 'Email' },
+  { id: 'TEMP', label: 'TEMP' },
 ];
 
 export default function Relatorios() {
@@ -103,6 +104,7 @@ export default function Relatorios() {
     missaoOp: [] as string[],
     secaoFracao: [] as string[],
     funcao: [] as string[],
+    temp: [] as string[],
     search: "",
   });
 
@@ -149,6 +151,7 @@ export default function Relatorios() {
     if (filters.missaoOp.length > 0 && militar.missaoOp && !filters.missaoOp.includes(militar.missaoOp)) return false;
     if (filters.secaoFracao.length > 0 && militar.secaoFracao && !filters.secaoFracao.includes(militar.secaoFracao)) return false;
     if (filters.funcao.length > 0 && militar.funcao && !filters.funcao.includes(militar.funcao)) return false;
+    if (filters.temp.length > 0 && (!militar.temp || !filters.temp.includes(militar.temp))) return false;
 
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
@@ -325,11 +328,17 @@ export default function Relatorios() {
     filters.missaoOp.forEach(v => params.append('missaoOp', v));
     filters.secaoFracao.forEach(v => params.append('secaoFracao', v));
     filters.funcao.forEach(v => params.append('funcao', v));
+    filters.temp.forEach(v => params.append('temp', v));
 
     if (filters.search) params.append('search', filters.search);
 
     // Adiciona colunas selecionadas
     selectedColumns.forEach(c => params.append('columns', c));
+
+    // Adiciona data/hora local
+    const now = new Date();
+    const localTime = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
+    params.append('localTime', localTime);
 
     const queryString = params.toString();
     const url = `/api/export/${format}${queryString ? `?${queryString}` : ''}`;
@@ -378,6 +387,7 @@ export default function Relatorios() {
       missaoOp: [],
       secaoFracao: [],
       funcao: [],
+      temp: [],
       search: "",
     });
   };
@@ -486,6 +496,16 @@ export default function Relatorios() {
                 selected={filters.funcao}
                 onChange={(val) => setFilters({ ...filters, funcao: val })}
                 placeholder="Selecione funções..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">TEMP</label>
+              <MultiSelect
+                options={[{ label: "SIM", value: "SIM" }, { label: "NÃO", value: "NÃO" }]}
+                selected={filters.temp}
+                onChange={(val) => setFilters({ ...filters, temp: val })}
+                placeholder="Selecione TEMP..."
               />
             </div>
 

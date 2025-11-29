@@ -55,7 +55,7 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
     const allData: Record<string, any> = {
       'ORD': m.ord || '',
       'P/GRAD': m.postoGraduacao,
-      'ARMA/QUADRO/SERV': m.armaQuadroServico || '',
+      'A/Q/S': m.armaQuadroServico || '',
       'NOME COMPLETO': m.nomeCompleto,
       'NOME GUERRA': m.nomeGuerra || '',
       'CIA': m.companhia,
@@ -68,6 +68,7 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
       'CPF': m.cpf || '',
       'TELEFONE': m.telefoneContato1 || '',
       'EMAIL': m.email || '',
+      'TEMP': m.temp || '',
     };
 
     // Add custom fields
@@ -99,7 +100,7 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
   const defaultWidths: Record<string, number> = {
     'ORD': 6,
     'P/GRAD': 10,
-    'ARMA/QUADRO/SERV': 15,
+    'A/Q/S': 15,
     'NOME COMPLETO': 35,
     'NOME GUERRA': 15,
     'CIA': 10,
@@ -111,7 +112,8 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
     'IDENTIDADE': 12,
     'CPF': 15,
     'TELEFONE': 15,
-    'EMAIL': 30
+    'EMAIL': 30,
+    'TEMP': 8
   };
 
   const headers = selectedColumns && selectedColumns.length > 0
@@ -135,7 +137,7 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
 /**
  * Gera arquivo PDF com formatação profissional militar
  */
-export function generatePDF(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = [], selectedColumns?: string[]): Buffer {
+export function generatePDF(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = [], selectedColumns?: string[], customDateString?: string): Buffer {
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -157,8 +159,14 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
   doc.text('RELATÓRIO DE EFETIVO MILITAR', pageWidth / 2, 22, { align: 'center' });
 
   // Data e hora do relatório
-  const now = new Date();
-  const dataHora = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
+  let dataHora: string;
+  if (customDateString) {
+    dataHora = customDateString;
+  } else {
+    const now = new Date();
+    dataHora = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
+  }
+
   doc.setFontSize(9);
   doc.setTextColor(100);
   doc.text(`Gerado em: ${dataHora}`, pageWidth / 2, 27, { align: 'center' });
@@ -173,7 +181,7 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
   const allHeadersMap: Record<string, (m: MilitaryPersonnel) => string> = {
     'ORD': m => m.ord?.toString() || '-',
     'P/GRAD': m => m.postoGraduacao,
-    'ARMA/QUADRO/SERV': m => m.armaQuadroServico || '-',
+    'A/Q/S': m => m.armaQuadroServico || '-',
     'NOME COMPLETO': m => m.nomeCompleto,
     'NOME GUERRA': m => m.nomeGuerra || '-',
     'CIA': m => m.companhia,
@@ -185,7 +193,8 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
     'IDENTIDADE': m => m.identidade || '-',
     'CPF': m => m.cpf || '-',
     'TELEFONE': m => m.telefoneContato1 || '-',
-    'EMAIL': m => m.email || '-'
+    'EMAIL': m => m.email || '-',
+    'TEMP': m => m.temp || '-'
   };
 
   // Add custom fields accessors
