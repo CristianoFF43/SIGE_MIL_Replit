@@ -18,6 +18,7 @@ import {
   type UserPreference,
   type InsertUserPreference,
   type FilterTree,
+  DEFAULT_PERMISSIONS,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ilike, or, and, sql, SQL } from "drizzle-orm";
@@ -61,14 +62,14 @@ export interface IStorage {
   createSavedFilterGroup(data: InsertSavedFilterGroup): Promise<SavedFilterGroup>;
   updateSavedFilterGroup(id: string, data: UpdateSavedFilterGroup): Promise<SavedFilterGroup>;
   deleteSavedFilterGroup(id: string): Promise<void>;
-  
+
   // Custom Field Definitions operations
   getAllCustomFieldDefinitions(): Promise<CustomFieldDefinition[]>;
   getCustomFieldDefinitionById(id: string): Promise<CustomFieldDefinition | undefined>;
   createCustomFieldDefinition(data: InsertCustomFieldDefinition): Promise<CustomFieldDefinition>;
   updateCustomFieldDefinition(id: string, data: UpdateCustomFieldDefinition): Promise<CustomFieldDefinition>;
   deleteCustomFieldDefinition(id: string): Promise<void>;
-  
+
   // Advanced filtering
   getMilitaryPersonnelWithFilter(filterTree: FilterTree): Promise<MilitaryPersonnel[]>;
 
@@ -100,25 +101,25 @@ export async function validateAndNormalizeCustomFields(
   const defs = definitions ?? await db.select().from(customFieldDefinitions);
   const normalized: Record<string, any> = {};
   const errors: string[] = [];
-  
+
   for (const def of defs) {
     const rawValue = customFields[def.name];
-    
+
     // Normalize empty values: trim strings and treat empty as null
-    const isEmpty = rawValue === undefined || rawValue === null || 
+    const isEmpty = rawValue === undefined || rawValue === null ||
       (typeof rawValue === 'string' && rawValue.trim() === '');
-    
+
     // Check required fields
     if (def.required === 1 && isEmpty) {
       errors.push(`Campo obrigatório ausente: ${def.label}`);
       continue;
     }
-    
+
     // Skip empty optional fields (don't store them)
     if (isEmpty) {
       continue;
     }
-    
+
     // Type conversion and validation
     if (def.fieldType === 'number') {
       const numValue = typeof rawValue === 'number' ? rawValue : parseFloat(rawValue);
@@ -141,11 +142,11 @@ export async function validateAndNormalizeCustomFields(
       normalized[def.name] = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue);
     }
   }
-  
+
   if (errors.length > 0) {
     throw new Error(errors.join('; '));
   }
-  
+
   return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
@@ -155,6 +156,30 @@ export class DatabaseStorage implements IStorage {
    */
   private async validateAndNormalizeCustomFields(customFields: Record<string, any> | null): Promise<Record<string, any> | null> {
     return validateAndNormalizeCustomFields(customFields);
+  }
+
+  private mergePermissions(role: string, storedPermissions: any): any {
+    const defaults = DEFAULT_PERMISSIONS[role] as any;
+    if (!defaults) return storedPermissions;
+    if (!storedPermissions) return defaults;
+
+    const result = { ...defaults };
+
+    for (const key in storedPermissions) {
+      if (
+        defaults[key] &&
+        typeof defaults[key] === 'object' &&
+        storedPermissions[key] &&
+        typeof storedPermissions[key] === 'object' &&
+        !Array.isArray(storedPermissions[key])
+      ) {
+        result[key] = { ...defaults[key], ...storedPermissions[key] };
+      } else {
+        result[key] = storedPermissions[key];
+      }
+    }
+
+    return result;
   }
 
   // User operations
@@ -171,12 +196,18 @@ export class DatabaseStorage implements IStorage {
         }
       }
     }
+
+    // Merge with defaults to ensure new permissions (like import) are available
+    if (user) {
+      user.permissions = this.mergePermissions(user.role, user.permissions);
+    }
+
     return user;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
     const existing = await db.select().from(users).where(eq(users.email, userData.email!));
-    
+
     if (existing.length > 0) {
       // User exists, update it
       const [user] = await db
@@ -209,6 +240,10 @@ export class DatabaseStorage implements IStorage {
           user.permissions = null;
         }
       }
+
+      // Merge with defaults
+      user.permissions = this.mergePermissions(user.role, user.permissions);
+
       return user;
     });
   }
@@ -243,7 +278,7 @@ export class DatabaseStorage implements IStorage {
     const updateData: any = {
       updatedAt: new Date(),
     };
-    
+
     if (data.email !== undefined) updateData.email = data.email;
     if (data.firstName !== undefined) updateData.firstName = data.firstName;
     if (data.lastName !== undefined) updateData.lastName = data.lastName;
@@ -291,7 +326,7 @@ export class DatabaseStorage implements IStorage {
       ? data.customFields as Record<string, any>
       : null;
     const normalizedCustomFields = await this.validateAndNormalizeCustomFields(customFieldsInput);
-    
+
     const [person] = await db
       .insert(militaryPersonnel)
       .values({ ...data, customFields: normalizedCustomFields })
@@ -312,7 +347,7 @@ export class DatabaseStorage implements IStorage {
       const normalizedCustomFields = await this.validateAndNormalizeCustomFields(customFieldsInput);
       normalizedData.customFields = normalizedCustomFields;
     }
-    
+
     const [person] = await db
       .update(militaryPersonnel)
       .set({ ...normalizedData, updatedAt: new Date() })
