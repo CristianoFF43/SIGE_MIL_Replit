@@ -7,8 +7,8 @@ import { firebaseAuth, requirePermission } from "./firebaseAuth";
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
-import { 
-  insertMilitaryPersonnelSchema, 
+import {
+  insertMilitaryPersonnelSchema,
   updateMilitaryPersonnelSchema,
   insertSavedFilterGroupSchema,
   updateSavedFilterGroupSchema,
@@ -47,7 +47,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json({
+        message: "Failed to fetch user",
+        error: error.message,
+        stack: error.stack
+      });
     }
   });
 
@@ -83,12 +87,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/users', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
     try {
       const validated = createUserSchema.parse(req.body);
-      
+
       // If no custom permissions provided, use default for the role
       if (!validated.permissions) {
         validated.permissions = DEFAULT_PERMISSIONS[validated.role];
       }
-      
+
       const user = await storage.createUser(validated);
       res.json(user);
     } catch (error: any) {
@@ -106,7 +110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const validated = updateUserSchema.parse({ ...req.body, id });
-      
+
       const user = await storage.updateUser(id, validated);
       res.json(user);
     } catch (error: any) {
@@ -122,14 +126,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete user (Permission-based)
   app.delete('/api/users/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
     try {
-      const { id} = req.params;
+      const { id } = req.params;
       const currentUserId = (req.user as any)?.claims?.sub;
-      
+
       // Prevent self-deletion
       if (id === currentUserId) {
         return res.status(400).json({ message: "Cannot delete your own account" });
       }
-      
+
       await storage.deleteUser(id);
       res.json({ message: "User deleted successfully" });
     } catch (error) {
@@ -142,9 +146,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/militares', isAuthenticated, requirePermission("militares", "view"), async (req: any, res) => {
     try {
       const { filter_id, filter_tree, companhia, posto, situacao, missaoOp, search } = req.query;
-      
+
       let militares;
-      
+
       // Prioridade 1: filter_id (filtro salvo)
       if (filter_id) {
         const userId = (req.user as any)?.claims?.sub;
@@ -152,12 +156,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!savedFilter) {
           return res.status(404).json({ message: "Saved filter not found" });
         }
-        
+
         // Verificação de autorização: apenas dono ou filtro compartilhado
         if (savedFilter.ownerId !== userId && savedFilter.scope !== 'shared') {
           return res.status(403).json({ message: "You don't have permission to use this filter" });
         }
-        
+
         militares = await storage.getMilitaryPersonnelWithFilter(savedFilter.filterTree);
       }
       // Prioridade 2: filter_tree (filtro avançado inline)
@@ -185,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       else {
         militares = await storage.getAllMilitaryPersonnel();
       }
-      
+
       res.json(militares);
     } catch (error) {
       console.error("Error fetching military personnel:", error);
@@ -197,7 +201,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const militar = await storage.getMilitaryPersonnelById(id);
-      
+
       if (!militar) {
         return res.status(404).json({ message: "Military personnel not found" });
       }
@@ -228,7 +232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       const validatedData = updateMilitaryPersonnelSchema.parse(req.body);
-      
+
       const militar = await storage.updateMilitaryPersonnel(id, validatedData);
       res.json(militar);
     } catch (error: any) {
@@ -334,7 +338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         ownerId: userId,
       });
-      
+
       const filter = await storage.createSavedFilterGroup(validatedData);
       res.status(201).json(filter);
     } catch (error: any) {
@@ -351,17 +355,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const filterId = req.params.id;
-      
+
       // Verifica se o usuário é o dono do filtro
       const existingFilter = await storage.getSavedFilterGroupById(filterId);
       if (!existingFilter) {
         return res.status(404).json({ message: "Filter not found" });
       }
-      
+
       if (existingFilter.ownerId !== userId) {
         return res.status(403).json({ message: "You can only edit your own filters" });
       }
-      
+
       const validatedData = updateSavedFilterGroupSchema.parse(req.body);
       const filter = await storage.updateSavedFilterGroup(filterId, validatedData);
       res.json(filter);
@@ -379,17 +383,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const filterId = req.params.id;
-      
+
       // Verifica se o usuário é o dono do filtro
       const existingFilter = await storage.getSavedFilterGroupById(filterId);
       if (!existingFilter) {
         return res.status(404).json({ message: "Filter not found" });
       }
-      
+
       if (existingFilter.ownerId !== userId) {
         return res.status(403).json({ message: "You can only delete your own filters" });
       }
-      
+
       await storage.deleteSavedFilterGroup(filterId);
       res.status(204).send();
     } catch (error) {
@@ -443,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!existing) {
         return res.status(404).json({ message: "Custom field not found" });
       }
-      
+
       const validatedData = updateCustomFieldDefinitionSchema.parse(req.body);
       const field = await storage.updateCustomFieldDefinition(req.params.id, validatedData);
       res.json(field);
@@ -521,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/import/google-sheets', isAuthenticated, requirePermission("importar", "import"), async (req, res) => {
     try {
       const { spreadsheetUrl, sheetName } = req.body;
-      
+
       if (!spreadsheetUrl) {
         return res.status(400).json({ message: "Spreadsheet URL or ID is required" });
       }
@@ -542,9 +546,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error: any) {
       console.error("Error importing data:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to import data",
-        error: error.message 
+        error: error.message
       });
     }
   });
@@ -603,9 +607,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/excel', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
     try {
       const { filter_id, filter_tree, companhia, posto, situacao, missaoOp, search } = req.query;
-      
+
       let militares;
-      
+
       // Prioridade 1: filter_id (filtro salvo)
       if (filter_id) {
         const userId = (req.user as any)?.claims?.sub;
@@ -613,12 +617,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!savedFilter) {
           return res.status(404).json({ message: "Saved filter not found" });
         }
-        
+
         // Verificação de autorização: apenas dono ou filtro compartilhado
         if (savedFilter.ownerId !== userId && savedFilter.scope !== 'shared') {
           return res.status(403).json({ message: "You don't have permission to use this filter" });
         }
-        
+
         militares = await storage.getMilitaryPersonnelWithFilter(savedFilter.filterTree);
       }
       // Prioridade 2: filter_tree (filtro avançado inline)
@@ -646,24 +650,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       else {
         militares = await storage.getAllMilitaryPersonnel();
       }
-      
+
       // Log de confirmação do total de registros
       console.log(`[EXPORT EXCEL] Exportando ${militares.length} militares`);
-      
+
       // Busca campos customizáveis
       const customFields = await storage.getAllCustomFieldDefinitions();
-      
+
       // Gera arquivo Excel
       const { generateExcel } = await import('./exportService');
       const excelBuffer = generateExcel(militares, customFields);
-      
+
       // Define headers para download
       const fileName = `efetivo_militar_${new Date().toISOString().split('T')[0]}.xlsx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', excelBuffer.length);
       res.setHeader('X-Total-Records', militares.length.toString());
-      
+
       res.send(excelBuffer);
     } catch (error) {
       console.error("Error exporting to Excel:", error);
@@ -674,9 +678,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/pdf', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
     try {
       const { filter_id, filter_tree, companhia, posto, situacao, missaoOp, search } = req.query;
-      
+
       let militares;
-      
+
       // Prioridade 1: filter_id (filtro salvo)
       if (filter_id) {
         const userId = (req.user as any)?.claims?.sub;
@@ -684,12 +688,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!savedFilter) {
           return res.status(404).json({ message: "Saved filter not found" });
         }
-        
+
         // Verificação de autorização: apenas dono ou filtro compartilhado
         if (savedFilter.ownerId !== userId && savedFilter.scope !== 'shared') {
           return res.status(403).json({ message: "You don't have permission to use this filter" });
         }
-        
+
         militares = await storage.getMilitaryPersonnelWithFilter(savedFilter.filterTree);
       }
       // Prioridade 2: filter_tree (filtro avançado inline)
@@ -717,24 +721,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       else {
         militares = await storage.getAllMilitaryPersonnel();
       }
-      
+
       // Log de confirmação do total de registros
       console.log(`[EXPORT PDF] Exportando ${militares.length} militares`);
-      
+
       // Busca campos customizáveis
       const customFields = await storage.getAllCustomFieldDefinitions();
-      
+
       // Gera arquivo PDF
       const { generatePDF } = await import('./exportService');
       const pdfBuffer = generatePDF(militares, customFields);
-      
+
       // Define headers para download
       const fileName = `efetivo_militar_${new Date().toISOString().split('T')[0]}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
       res.setHeader('X-Total-Records', militares.length.toString());
-      
+
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Error exporting to PDF:", error);
@@ -747,26 +751,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/test-login', async (req: any, res) => {
     const testAuthEnabled = process.env.TEST_AUTH_ENABLED === 'true';
     // Use default secret in non-production, require explicit secret in production
-    const testAuthSecret = process.env.TEST_AUTH_SECRET || 
+    const testAuthSecret = process.env.TEST_AUTH_SECRET ||
       (process.env.NODE_ENV === 'production' ? undefined : 'test-secret-123');
     const providedSecret = req.headers['x-test-auth-secret'];
-    
+
     if (!testAuthEnabled) {
       return res.status(404).json({ message: "Not found" });
     }
-    
+
     if (!testAuthSecret || providedSecret !== testAuthSecret) {
       console.warn("[TEST-LOGIN] Invalid or missing test auth secret");
       return res.status(403).json({ message: "Invalid credentials" });
     }
-    
+
     try {
       const { sub, email, first_name, last_name, role } = req.body;
-      
+
       if (!sub || !email) {
         return res.status(400).json({ message: "Missing required fields: sub, email" });
       }
-      
+
       // Upsert user with provided claims
       let user = await storage.getUser(sub);
       if (!user) {
@@ -782,7 +786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         user = await storage.getUser(sub);
       }
-      
+
       // Create mock session similar to Replit Auth (for Passport compatibility)
       // This allows isAuthenticated middleware to work
       const mockUser = {
@@ -798,17 +802,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expires_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days from now
         testUser: true,
       };
-      
+
       // Establish session using Passport's login method
       req.login(mockUser, (err: any) => {
         if (err) {
           console.error("[TEST-LOGIN] Session creation failed:", err);
           return res.status(500).json({ message: "Failed to create session" });
         }
-        
+
         console.log(`[TEST-LOGIN] Test user authenticated with session: ${email} (role: ${user?.role})`);
-        
-        res.json({ 
+
+        res.json({
           success: true,
           user: {
             id: sub,
@@ -829,15 +833,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const allUsers = await storage.getAllUsers();
-      
+
       console.log(`[BOOTSTRAP] User ${userId} attempting to become admin`);
       console.log(`[BOOTSTRAP] Total users in database: ${allUsers.length}`);
       console.log(`[BOOTSTRAP] Users: ${JSON.stringify(allUsers.map(u => ({ id: u.id, email: u.email, role: u.role })))}`);
-      
+
       // Only allow if there are no administrators yet AND this is the first user
       const hasAdmin = allUsers.some(u => u.role === 'administrator');
       console.log(`[BOOTSTRAP] Has admin: ${hasAdmin}`);
-      
+
       if (hasAdmin) {
         const adminUsers = allUsers.filter(u => u.role === 'administrator');
         console.log(`[BOOTSTRAP] Existing admins: ${JSON.stringify(adminUsers.map(u => ({ id: u.id, email: u.email })))}`);
@@ -849,19 +853,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sortedUsers = allUsers.sort((a, b) => {
         return (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0);
       });
-      
+
       if (sortedUsers.length > 0 && sortedUsers[0].id !== userId) {
         return res.status(403).json({ message: "Only the first registered user can become administrator" });
       }
 
       // Promote current user to administrator
       const user = await storage.updateUserRole(userId, 'administrator');
-      
+
       // Force logout to refresh session with new role
       req.logout(() => {
-        res.json({ 
+        res.json({
           message: "Promoted to administrator successfully. Please log in again to access admin features.",
-          requiresRelogin: true 
+          requiresRelogin: true
         });
       });
     } catch (error) {
@@ -892,7 +896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Attempt to delete sessions (ignore if table missing)
         const result: any = await db.execute(sql`DELETE FROM sessions`);
         sessionsDeleted = (result.rowCount || 0);
-      } catch {}
+      } catch { }
 
       // Delete app users (cascade will remove related preferences/filters)
       let usersDeleted = 0;
@@ -901,7 +905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { sql } = await import('drizzle-orm');
         const result: any = await db.execute(sql`DELETE FROM users`);
         usersDeleted = (result.rowCount || 0);
-      } catch {}
+      } catch { }
 
       // Delete Firebase Auth users
       let firebaseDeleted = 0;
@@ -912,7 +916,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await admin.auth().deleteUser(u.uid);
           firebaseDeleted++;
         }
-      } catch {}
+      } catch { }
 
       return res.json({
         ok: true,
