@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 import admin from "firebase-admin";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { DEFAULT_PERMISSIONS } from "@shared/schema";
 
 let firebaseInitialized = false;
