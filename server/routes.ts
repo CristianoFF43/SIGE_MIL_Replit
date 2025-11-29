@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { db } from "./db";
+import { storage } from "./storage.js";
+import { db } from "./db.js";
 import { sql } from "drizzle-orm";
-import { firebaseAuth, requirePermission } from "./firebaseAuth";
+import { firebaseAuth, requirePermission } from "./firebaseAuth.js";
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
@@ -20,7 +20,7 @@ import {
   DEFAULT_PERMISSIONS,
 } from "@shared/schema";
 import { fromError } from "zod-validation-error";
-import { simpleFiltersToTree } from "./filterBuilder";
+import { simpleFiltersToTree } from "./filterBuilder.js";
 
 const isAuthenticated = firebaseAuth;
 
