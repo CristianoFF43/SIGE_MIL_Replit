@@ -117,6 +117,7 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'observacoes': 'observacoes',
   'observações': 'observacoes',
   'observacao': 'observacoes',
+  'temp': 'temp',
 };
 
 // Remove espaços extras e converte para string
