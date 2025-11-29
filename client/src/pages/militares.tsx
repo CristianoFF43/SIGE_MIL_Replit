@@ -792,6 +792,23 @@ export default function Militares() {
                         fieldName="missaoOp"
                       />
                     ) : (
+                      militar.missaoOp || "-"
+                    )}
+                  </TableCell>
+
+                  <TableCell>
+                    {isManager ? (
+                      <EditableCell
+                        value={militar.cpf}
+                        onSave={(val) => handleCellUpdate(militar.id, "cpf", val)}
+                        placeholder="000.000.000-00"
+                        className="font-mono text-sm"
+                        fieldType="cpf"
+                        militarId={militar.id}
+                        savingMilitarId={savingCell}
+                        fieldName="cpf"
+                      />
+                    ) : (
                       <span className="font-mono text-sm">{formatCPF(militar.cpf)}</span>
                     )}
                   </TableCell>
@@ -826,6 +843,22 @@ export default function Militares() {
                       />
                     ) : (
                       militar.email || "-"
+                    )}
+                  </TableCell>
+
+                  <TableCell>
+                    {isManager ? (
+                      <EditableCell
+                        value={militar.temp}
+                        onSave={(val) => handleCellUpdate(militar.id, "temp", val)}
+                        type="select"
+                        options={["SIM", "NÃO"]}
+                        militarId={militar.id}
+                        savingMilitarId={savingCell}
+                        fieldName="temp"
+                      />
+                    ) : (
+                      militar.temp || "-"
                     )}
                   </TableCell>
 
