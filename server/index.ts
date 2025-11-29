@@ -1,7 +1,11 @@
 import { createApp } from "./app";
 import { log } from "./vite";
+import { cleanupTempCustomField } from "./cleanupTemp";
 
 (async () => {
+  // Run cleanup before starting server
+  await cleanupTempCustomField();
+
   const { server } = await createApp();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
