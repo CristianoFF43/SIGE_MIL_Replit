@@ -160,6 +160,14 @@ export class DatabaseStorage implements IStorage {
 
   private mergePermissions(role: string, storedPermissions: any): any {
     const defaults = DEFAULT_PERMISSIONS[role] as any;
+
+    // For administrators, always enforce the latest default permissions
+    // This ensures they always have access to new features (like import)
+    // regardless of what is stored in the database.
+    if (role === 'administrator') {
+      return defaults;
+    }
+
     if (!defaults) return storedPermissions;
     if (!storedPermissions) return defaults;
 
