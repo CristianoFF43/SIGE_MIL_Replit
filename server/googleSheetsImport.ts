@@ -3,51 +3,27 @@ import { db } from "./db";
 import { militaryPersonnel, customFieldDefinitions } from "@shared/schema";
 import { validateAndNormalizeCustomFields } from "./storage";
 
-let connectionSettings: any;
-
-async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-drive',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
-    throw new Error('Google Drive not connected');
-  }
-  return accessToken;
-}
-
 async function getGoogleSheetsClient() {
-  const accessToken = await getAccessToken();
+  // Use Firebase Admin credentials which are already set up for the project
+  // This avoids needing separate Google Cloud credentials just for Sheets
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-  const oauth2Client = new google.auth.OAuth2();
-  oauth2Client.setCredentials({
-    access_token: accessToken
+  if (!clientEmail || !privateKey) {
+    throw new Error('Missing Firebase Service Account credentials (FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)');
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey,
+      project_id: projectId,
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 
-  return google.sheets({ version: 'v4', auth: oauth2Client });
+  return google.sheets({ version: 'v4', auth });
 }
 
 // Mapeamento de colunas da planilha (baseado no formato típico)
@@ -87,7 +63,7 @@ function parseRow(row: any[], customFieldsHeader: string[] = []): RawMilitaryDat
   // Pula linhas vazias ou de cabeçalho
   if (!row || row.length === 0) return null;
   if (!row[1] || !row[3]) return null; // Precisa ter pelo menos P/GRAD e NOME COMPLETO
-  
+
   // Remove espaços extras e converte para string
   // IMPORTANTE: Retorna undefined se célula vazia, null, ou contém apenas espaços
   const cleanStr = (val: any) => {
@@ -96,7 +72,7 @@ function parseRow(row: any[], customFieldsHeader: string[] = []): RawMilitaryDat
     // Se após limpar ficou vazio, retorna undefined
     return cleaned === '' ? undefined : cleaned;
   };
-  
+
   const cleanNum = (val: any) => {
     if (!val) return undefined;
     const num = parseInt(String(val).trim());
@@ -144,9 +120,9 @@ function parseRow(row: any[], customFieldsHeader: string[] = []): RawMilitaryDat
 export async function importFromGoogleSheets(spreadsheetId: string, sheetName: string = 'Sheet1') {
   try {
     console.log(`Starting import from Google Sheets: ${spreadsheetId}`);
-    
+
     const sheets = await getGoogleSheetsClient();
-    
+
     // Busca todos os dados da planilha (estende até coluna ZZ para pegar campos customizáveis)
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -169,7 +145,7 @@ export async function importFromGoogleSheets(spreadsheetId: string, sheetName: s
         customFieldsHeader.push(header.trim());
       }
     }
-    
+
     if (customFieldsHeader.length > 0) {
       console.log(`Found ${customFieldsHeader.length} custom field columns:`, customFieldsHeader);
     }
@@ -193,7 +169,7 @@ export async function importFromGoogleSheets(spreadsheetId: string, sheetName: s
     // IMPORTANTE: Usa transação para garantir atomicidade (all-or-nothing)
     // Se falhar no meio, nada é perdido (rollback automático)
     console.log('Starting database transaction...');
-    
+
     const imported = await db.transaction(async (tx: any) => {
       // 1. Limpa dados existentes dentro da transação
       console.log('Clearing existing military personnel data...');
@@ -203,7 +179,7 @@ export async function importFromGoogleSheets(spreadsheetId: string, sheetName: s
       // 2. Fetch custom field definitions ONCE (performance optimization)
       const fieldDefinitions = await db.select().from(customFieldDefinitions);
       console.log(`Found ${fieldDefinitions.length} custom field definitions`);
-      
+
       // 3. Validate and normalize all custom fields before inserting
       console.log('Validating and normalizing custom fields...');
       const validatedMilitares = await Promise.all(
@@ -221,28 +197,28 @@ export async function importFromGoogleSheets(spreadsheetId: string, sheetName: s
           return militar;
         })
       );
-      
+
       // Filter out null entries (validation failures)
       const validMilitares = validatedMilitares.filter(m => m !== null) as RawMilitaryData[];
       const failedCount = militares.length - validMilitares.length;
       console.log(`✓ Validated ${validMilitares.length}/${militares.length} records (${failedCount} failed validation and were skipped)`);
-      
+
       // 4. Importa em lotes para performance
       const batchSize = 100;
       let count = 0;
-      
+
       for (let i = 0; i < validMilitares.length; i += batchSize) {
         const batch = validMilitares.slice(i, i + batchSize);
         await tx.insert(militaryPersonnel).values(batch);
         count += batch.length;
         console.log(`Imported ${count}/${validMilitares.length} records...`);
       }
-      
+
       return count;
     });
 
     console.log(`✓ Transaction committed - Successfully imported ${imported} military personnel records`);
-    
+
     return {
       success: true,
       total: imported,
@@ -260,13 +236,13 @@ export function extractSpreadsheetId(urlOrId: string): string {
   if (!urlOrId.includes('/')) {
     return urlOrId;
   }
-  
+
   // Extrai ID de URL do Google Sheets
   // https://docs.google.com/spreadsheets/d/{ID}/edit...
   const match = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (match && match[1]) {
     return match[1];
   }
-  
+
   throw new Error('Invalid Google Sheets URL or ID');
 }

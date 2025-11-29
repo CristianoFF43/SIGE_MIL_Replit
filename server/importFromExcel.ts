@@ -4,51 +4,26 @@ import { db } from "./db";
 import { militaryPersonnel, customFieldDefinitions, type CustomFieldDefinition } from "@shared/schema";
 import { validateAndNormalizeCustomFields } from "./storage";
 
-let connectionSettings: any;
-
-async function getAccessToken() {
-  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
-    return connectionSettings.settings.access_token;
-  }
-  
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
-  const xReplitToken = process.env.REPL_IDENTITY 
-    ? 'repl ' + process.env.REPL_IDENTITY 
-    : process.env.WEB_REPL_RENEWAL 
-    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
-    : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
-  }
-
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-drive',
-    {
-      headers: {
-        'Accept': 'application/json',
-        'X_REPLIT_TOKEN': xReplitToken
-      }
-    }
-  ).then(res => res.json()).then(data => data.items?.[0]);
-
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
-
-  if (!connectionSettings || !accessToken) {
-    throw new Error('Google Drive not connected');
-  }
-  return accessToken;
-}
-
 async function getGoogleDriveClient() {
-  const accessToken = await getAccessToken();
+  // Use Firebase Admin credentials which are already set up for the project
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-  const oauth2Client = new google.auth.OAuth2();
-  oauth2Client.setCredentials({
-    access_token: accessToken
+  if (!clientEmail || !privateKey) {
+    throw new Error('Missing Firebase Service Account credentials (FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)');
+  }
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: clientEmail,
+      private_key: privateKey,
+      project_id: projectId,
+    },
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
   });
 
-  return google.drive({ version: 'v3', auth: oauth2Client });
+  return google.drive({ version: 'v3', auth });
 }
 
 interface RawMilitaryData {
@@ -254,9 +229,9 @@ function parseRow(row: any[], columnMapping: ColumnMapping[]): RawMilitaryData |
 export async function importFromExcelFile(fileId: string) {
   try {
     console.log(`Starting import from Excel file: ${fileId}`);
-    
+
     const drive = await getGoogleDriveClient();
-    
+
     // Baixa o arquivo do Google Drive
     console.log('Downloading file from Google Drive...');
     const response = await drive.files.get({
@@ -269,12 +244,12 @@ export async function importFromExcelFile(fileId: string) {
     // Processa o arquivo Excel
     console.log('Processing Excel file...');
     const workbook = XLSX.read(response.data, { type: 'buffer' });
-    
+
     // Pega a primeira aba
     const sheetName = workbook.SheetNames[0];
     console.log(`Reading sheet: ${sheetName}`);
     const worksheet = workbook.Sheets[sheetName];
-    
+
     // Converte para array de arrays
     const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
@@ -349,7 +324,7 @@ export async function importFromExcelFile(fileId: string) {
       // 2. Fetch custom field definitions ONCE (performance optimization)
       const fieldDefinitions = await db.select().from(customFieldDefinitions);
       console.log(`Found ${fieldDefinitions.length} custom field definitions`);
-      
+
       // 3. Validate and normalize all custom fields before inserting
       console.log('Validating and normalizing custom fields...');
       const validatedMilitares = await Promise.all(
@@ -367,28 +342,28 @@ export async function importFromExcelFile(fileId: string) {
           return militar;
         })
       );
-      
+
       // Filter out null entries (validation failures)
       const validMilitares = validatedMilitares.filter(m => m !== null) as RawMilitaryData[];
       const failedCount = militares.length - validMilitares.length;
       console.log(`✓ Validated ${validMilitares.length}/${militares.length} records (${failedCount} failed validation and were skipped)`);
-      
+
       // 4. Importa em lotes para performance
       const batchSize = 100;
       let count = 0;
-      
+
       for (let i = 0; i < validMilitares.length; i += batchSize) {
         const batch = validMilitares.slice(i, i + batchSize);
         await tx.insert(militaryPersonnel).values(batch);
         count += batch.length;
-        console.log(`📥 Imported ${count}/${validMilitares.length} records (${Math.round(count/validMilitares.length*100)}%)...`);
+        console.log(`📥 Imported ${count}/${validMilitares.length} records (${Math.round(count / validMilitares.length * 100)}%)...`);
       }
-      
+
       return count;
     });
 
     console.log(`\n✅ Transaction committed - Successfully imported ${imported} military personnel records`);
-    
+
     return {
       success: true,
       total: imported,
@@ -518,7 +493,7 @@ export async function importFromBuffer(buffer: Buffer) {
         const batch = validMilitares.slice(i, i + batchSize);
         await tx.insert(militaryPersonnel).values(batch);
         count += batch.length;
-        console.log(`📥 Imported ${count}/${validMilitares.length} records (${Math.round(count/validMilitares.length*100)}%)...`);
+        console.log(`📥 Imported ${count}/${validMilitares.length} records (${Math.round(count / validMilitares.length * 100)}%)...`);
       }
 
       return count;
@@ -544,13 +519,13 @@ export function extractFileId(urlOrId: string): string {
   if (!urlOrId.includes('/')) {
     return urlOrId;
   }
-  
+
   // Extrai ID de URL do Google Drive
   // https://docs.google.com/spreadsheets/d/{ID}/edit...
   const match = urlOrId.match(/\/d\/([a-zA-Z0-9-_]+)/);
   if (match && match[1]) {
     return match[1];
   }
-  
+
   throw new Error('Invalid Google Drive URL or ID');
 }
