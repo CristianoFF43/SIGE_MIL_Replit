@@ -35,7 +35,7 @@ export function applyFilters(militares: MilitaryPersonnel[], filters: ExportFilt
 
   if (filters.search) {
     const searchLower = filters.search.toLowerCase();
-    filtered = filtered.filter(m => 
+    filtered = filtered.filter(m =>
       m.nomeCompleto.toLowerCase().includes(searchLower) ||
       m.nomeGuerra?.toLowerCase().includes(searchLower) ||
       m.cpf?.includes(filters.search!) ||
@@ -49,10 +49,13 @@ export function applyFilters(militares: MilitaryPersonnel[], filters: ExportFilt
 /**
  * Gera arquivo Excel com formatação profissional
  */
-export function generateExcel(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = []): Buffer {
+/**
+ * Gera arquivo Excel com formatação profissional
+ */
+export function generateExcel(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = [], selectedColumns?: string[]): Buffer {
   // Prepara os dados para exportação
   const data = militares.map(m => {
-    const baseData: Record<string, any> = {
+    const allData: Record<string, any> = {
       'ORD': m.ord || '',
       'P/GRAD': m.postoGraduacao,
       'ARMA/QUADRO/SERV': m.armaQuadroServico || '',
@@ -73,10 +76,21 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
     // Add custom fields
     const militarCustomFields = (m.customFields as Record<string, any>) || {};
     customFields.forEach(field => {
-      baseData[field.label] = militarCustomFields[field.name] || '';
+      allData[field.label] = militarCustomFields[field.name] || '';
     });
 
-    return baseData;
+    // Filter by selected columns if provided
+    if (selectedColumns && selectedColumns.length > 0) {
+      const filteredData: Record<string, any> = {};
+      selectedColumns.forEach(col => {
+        if (allData[col] !== undefined) {
+          filteredData[col] = allData[col];
+        }
+      });
+      return filteredData;
+    }
+
+    return allData;
   });
 
   // Cria workbook e worksheet
@@ -84,24 +98,33 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
   const ws = XLSX.utils.json_to_sheet(data);
 
   // Define larguras das colunas para melhor visualização
-  const colWidths = [
-    { wch: 6 },  // ORD
-    { wch: 10 }, // P/GRAD
-    { wch: 15 }, // ARMA/QUADRO/SERV
-    { wch: 35 }, // NOME COMPLETO
-    { wch: 15 }, // NOME GUERRA
-    { wch: 10 }, // CIA
-    { wch: 15 }, // SEÇÃO/FRAÇÃO
-    { wch: 25 }, // FUNÇÃO
-    { wch: 12 }, // SITUAÇÃO
-    { wch: 12 }, // MISSÃO
-    { wch: 15 }, // CURSO
-    { wch: 12 }, // IDENTIDADE
-    { wch: 15 }, // CPF
-    { wch: 15 }, // TELEFONE
-    { wch: 30 }, // EMAIL
-    ...customFields.map(() => ({ wch: 20 })), // Custom fields columns
-  ];
+  // Se houver colunas selecionadas, ajusta largura apenas para elas
+  const defaultWidths: Record<string, number> = {
+    'ORD': 6,
+    'P/GRAD': 10,
+    'ARMA/QUADRO/SERV': 15,
+    'NOME COMPLETO': 35,
+    'NOME GUERRA': 15,
+    'CIA': 10,
+    'SEÇÃO/FRAÇÃO': 15,
+    'FUNÇÃO': 25,
+    'SITUAÇÃO': 12,
+    'MISSÃO': 12,
+    'CURSO': 15,
+    'IDENTIDADE': 12,
+    'CPF': 15,
+    'TELEFONE': 15,
+    'EMAIL': 30
+  };
+
+  const headers = selectedColumns && selectedColumns.length > 0
+    ? selectedColumns
+    : Object.keys(data[0] || {});
+
+  const colWidths = headers.map(header => ({
+    wch: defaultWidths[header] || 20 // Default width for custom fields or unknown columns
+  }));
+
   ws['!cols'] = colWidths;
 
   // Adiciona worksheet ao workbook
@@ -115,7 +138,7 @@ export function generateExcel(militares: MilitaryPersonnel[], customFields: Cust
 /**
  * Gera arquivo PDF com formatação profissional militar
  */
-export function generatePDF(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = []): Buffer {
+export function generatePDF(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = [], selectedColumns?: string[]): Buffer {
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -124,18 +147,18 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
 
   // Cabeçalho do documento
   const pageWidth = doc.internal.pageSize.getWidth();
-  
+
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.text('EXÉRCITO BRASILEIRO', pageWidth / 2, 15, { align: 'center' });
-  
+
   doc.setFontSize(14);
   doc.text('7º BATALHÃO DE INFANTARIA DE SELVA', pageWidth / 2, 22, { align: 'center' });
-  
+
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
   doc.text('RELATÓRIO DE EFETIVO MILITAR', pageWidth / 2, 29, { align: 'center' });
-  
+
   // Data e hora do relatório
   const now = new Date();
   const dataHora = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
@@ -149,35 +172,49 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
   doc.setFont('helvetica', 'bold');
   doc.text(`Total de militares: ${militares.length}`, 14, 42);
 
-  // Prepara dados da tabela
-  const tableData = militares.map(m => {
-    const baseRow = [
-      m.ord || '-',
-      m.postoGraduacao,
-      m.nomeCompleto,
-      m.nomeGuerra || '-',
-      m.companhia,
-      m.secaoFracao || '-',
-      m.funcao || '-',
-      m.situacao || '-',
-      m.missaoOp || '-',
-    ];
+  // Definição de todos os dados possíveis
+  const allHeadersMap: Record<string, (m: MilitaryPersonnel) => string> = {
+    'ORD': m => m.ord?.toString() || '-',
+    'P/GRAD': m => m.postoGraduacao,
+    'ARMA/QUADRO/SERV': m => m.armaQuadroServico || '-',
+    'NOME COMPLETO': m => m.nomeCompleto,
+    'NOME GUERRA': m => m.nomeGuerra || '-',
+    'CIA': m => m.companhia,
+    'SEÇÃO/FRAÇÃO': m => m.secaoFracao || '-',
+    'FUNÇÃO': m => m.funcao || '-',
+    'SITUAÇÃO': m => m.situacao || '-',
+    'MISSÃO': m => m.missaoOp || '-',
+    'CURSO': m => m.curso || '-',
+    'IDENTIDADE': m => m.identidade || '-',
+    'CPF': m => m.cpf || '-',
+    'TELEFONE': m => m.telefoneContato1 || '-',
+    'EMAIL': m => m.email || '-'
+  };
 
-    // Add custom fields
-    const militarCustomFields = (m.customFields as Record<string, any>) || {};
-    const customFieldsData = customFields.map(field => militarCustomFields[field.name] || '-');
-
-    return [...baseRow, ...customFieldsData];
+  // Add custom fields accessors
+  customFields.forEach(field => {
+    allHeadersMap[field.label] = m => {
+      const cf = (m.customFields as Record<string, any>) || {};
+      return cf[field.name] || '-';
+    };
   });
 
-  // Prepara cabeçalhos da tabela
-  const baseHeaders = ['ORD', 'P/GRAD', 'NOME COMPLETO', 'NOME GUERRA', 'CIA', 'SEÇ/FRAÇÃO', 'FUNÇÃO', 'SITUAÇÃO', 'MISSÃO'];
-  const customFieldHeaders = customFields.map(field => field.label);
-  const allHeaders = [...baseHeaders, ...customFieldHeaders];
+  // Determine headers to use
+  const headersToUse = selectedColumns && selectedColumns.length > 0
+    ? selectedColumns
+    : ['ORD', 'P/GRAD', 'NOME COMPLETO', 'NOME GUERRA', 'CIA', 'SEÇ/FRAÇÃO', 'FUNÇÃO', 'SITUAÇÃO', 'MISSÃO'];
+
+  // Prepara dados da tabela
+  const tableData = militares.map(m => {
+    return headersToUse.map(header => {
+      const accessor = allHeadersMap[header];
+      return accessor ? accessor(m) : '-';
+    });
+  });
 
   // Gera tabela com autoTable
   autoTable(doc, {
-    head: [allHeaders],
+    head: [headersToUse],
     body: tableData,
     startY: 47,
     theme: 'grid',
@@ -192,22 +229,17 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
       fontSize: 7,
       cellPadding: 2,
     },
-    columnStyles: {
-      0: { cellWidth: 10, halign: 'center' },  // ORD
-      1: { cellWidth: 16, halign: 'center' },  // P/GRAD
-      2: { cellWidth: 55 },                     // NOME COMPLETO
-      3: { cellWidth: 22, halign: 'center' },  // NOME GUERRA
-      4: { cellWidth: 18, halign: 'center' },  // CIA
-      5: { cellWidth: 22, halign: 'center' },  // SEÇ/FRAÇÃO
-      6: { cellWidth: 35 },                     // FUNÇÃO
-      7: { cellWidth: 22, halign: 'center' },  // SITUAÇÃO
-      8: { cellWidth: 22, halign: 'center' },  // MISSÃO
+    // Auto-adjust column widths
+    styles: {
+      overflow: 'linebreak',
+      cellWidth: 'wrap'
     },
-    didDrawPage: function(data: any) {
+    didDrawPage: function (data: any) {
       // Rodapé com número da página
-      const pageCount = (doc as any).getNumberOfPages ? (doc as any).getNumberOfPages() : (doc as any).internal.pages.length - 1;
-      const currentPage = data.pageNumber || 1;
-      
+      // Correção da numeração de páginas: Pag X de Y
+      const pageCount = doc.internal.getNumberOfPages();
+      const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+
       doc.setFontSize(8);
       doc.setTextColor(100);
       doc.text(
@@ -216,13 +248,13 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
         doc.internal.pageSize.getHeight() - 10,
         { align: 'center' }
       );
-      
+
       doc.text(
         '7º BIS - Sistema de Gestão de Efetivo',
         14,
         doc.internal.pageSize.getHeight() - 10
       );
-      
+
       doc.setTextColor(0);
     },
     margin: { top: 47, left: 14, right: 14, bottom: 20 },

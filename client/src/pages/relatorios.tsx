@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileSpreadsheet, FileText, Download, Filter, X, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar as RadarIcon } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileSpreadsheet, FileText, Download, Filter, X, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar as RadarIcon, Columns } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -34,6 +37,8 @@ import {
 import type { MilitaryPersonnel } from "@shared/schema";
 import { getRankCategory } from "@/lib/utils";
 import { COMPANIES, RANKS, STATUSES, MISSIONS } from "@shared/schema";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type ChartType = "bar" | "pie" | "line" | "area" | "radar";
 type DataMetric = "company" | "rank" | "status" | "mission";
@@ -66,18 +71,45 @@ const chartTypeIcons: Record<ChartType, any> = {
   radar: RadarIcon,
 };
 
+const AVAILABLE_COLUMNS = [
+  { id: 'ORD', label: 'Ordem' },
+  { id: 'P/GRAD', label: 'Posto/Graduação' },
+  { id: 'ARMA/QUADRO/SERV', label: 'Arma/Quadro/Serviço' },
+  { id: 'NOME COMPLETO', label: 'Nome Completo' },
+  { id: 'NOME GUERRA', label: 'Nome de Guerra' },
+  { id: 'CIA', label: 'Companhia' },
+  { id: 'SEÇÃO/FRAÇÃO', label: 'Seção/Fração' },
+  { id: 'FUNÇÃO', label: 'Função' },
+  { id: 'SITUAÇÃO', label: 'Situação' },
+  { id: 'MISSÃO', label: 'Missão' },
+  { id: 'CURSO', label: 'Curso' },
+  { id: 'IDENTIDADE', label: 'Identidade' },
+  { id: 'CPF', label: 'CPF' },
+  { id: 'TELEFONE', label: 'Telefone' },
+  { id: 'EMAIL', label: 'Email' },
+];
+
 export default function Relatorios() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [metric, setMetric] = useState<DataMetric>("rank");
+
+  // Filtros agora suportam arrays para multi-seleção
   const [filters, setFilters] = useState({
-    companhia: "",
-    posto: "",
-    situacao: "",
-    missaoOp: "",
+    companhia: [] as string[],
+    posto: [] as string[],
+    situacao: [] as string[],
+    missaoOp: [] as string[],
+    secaoFracao: [] as string[],
+    funcao: [] as string[],
     search: "",
   });
+
+  // Colunas selecionadas para exportação
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(
+    AVAILABLE_COLUMNS.map(c => c.id)
+  );
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -105,12 +137,19 @@ export default function Relatorios() {
     );
   }
 
+  // Extrair opções únicas para os novos filtros
+  const uniqueSecoes = Array.from(new Set(militares.map(m => m.secaoFracao).filter(Boolean))) as string[];
+  const uniqueFuncoes = Array.from(new Set(militares.map(m => m.funcao).filter(Boolean))) as string[];
+
   // Aplica filtros localmente para preview
   const filteredMilitares = militares.filter(militar => {
-    if (filters.companhia && militar.companhia !== filters.companhia) return false;
-    if (filters.posto && militar.postoGraduacao !== filters.posto) return false;
-    if (filters.situacao && militar.situacao !== filters.situacao) return false;
-    if (filters.missaoOp && militar.missaoOp !== filters.missaoOp) return false;
+    if (filters.companhia.length > 0 && !filters.companhia.includes(militar.companhia)) return false;
+    if (filters.posto.length > 0 && !filters.posto.includes(militar.postoGraduacao)) return false;
+    if (filters.situacao.length > 0 && militar.situacao && !filters.situacao.includes(militar.situacao)) return false;
+    if (filters.missaoOp.length > 0 && militar.missaoOp && !filters.missaoOp.includes(militar.missaoOp)) return false;
+    if (filters.secaoFracao.length > 0 && militar.secaoFracao && !filters.secaoFracao.includes(militar.secaoFracao)) return false;
+    if (filters.funcao.length > 0 && militar.funcao && !filters.funcao.includes(militar.funcao)) return false;
+
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       const matchesName = militar.nomeCompleto.toLowerCase().includes(searchLower);
@@ -278,11 +317,19 @@ export default function Relatorios() {
   const handleExport = async (format: "excel" | "pdf") => {
     // Constrói query string com filtros
     const params = new URLSearchParams();
-    if (filters.companhia) params.append('companhia', filters.companhia);
-    if (filters.posto) params.append('posto', filters.posto);
-    if (filters.situacao) params.append('situacao', filters.situacao);
-    if (filters.missaoOp) params.append('missaoOp', filters.missaoOp);
+
+    // Adiciona filtros multi-valor
+    filters.companhia.forEach(v => params.append('companhia', v));
+    filters.posto.forEach(v => params.append('posto', v));
+    filters.situacao.forEach(v => params.append('situacao', v));
+    filters.missaoOp.forEach(v => params.append('missaoOp', v));
+    filters.secaoFracao.forEach(v => params.append('secaoFracao', v));
+    filters.funcao.forEach(v => params.append('funcao', v));
+
     if (filters.search) params.append('search', filters.search);
+
+    // Adiciona colunas selecionadas
+    selectedColumns.forEach(c => params.append('columns', c));
 
     const queryString = params.toString();
     const url = `/api/export/${format}${queryString ? `?${queryString}` : ''}`;
@@ -325,15 +372,33 @@ export default function Relatorios() {
 
   const clearFilters = () => {
     setFilters({
-      companhia: "",
-      posto: "",
-      situacao: "",
-      missaoOp: "",
+      companhia: [],
+      posto: [],
+      situacao: [],
+      missaoOp: [],
+      secaoFracao: [],
+      funcao: [],
       search: "",
     });
   };
 
-  const hasFilters = Object.values(filters).some(v => v !== "");
+  const hasFilters = Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : v !== "");
+
+  const toggleColumn = (columnId: string) => {
+    setSelectedColumns(prev =>
+      prev.includes(columnId)
+        ? prev.filter(c => c !== columnId)
+        : [...prev, columnId]
+    );
+  };
+
+  const selectAllColumns = () => {
+    setSelectedColumns(AVAILABLE_COLUMNS.map(c => c.id));
+  };
+
+  const clearColumns = () => {
+    setSelectedColumns([]);
+  };
 
   return (
     <div className="space-y-6">
@@ -366,65 +431,65 @@ export default function Relatorios() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Companhia</label>
-              <Select value={filters.companhia} onValueChange={(value) => setFilters({ ...filters, companhia: value === "all" ? "" : value })}>
-                <SelectTrigger data-testid="select-companhia-filter">
-                  <SelectValue placeholder="Todas as companhias" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as companhias</SelectItem>
-                  {COMPANIES.map(cia => (
-                    <SelectItem key={cia} value={cia}>{cia}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={COMPANIES.map(c => ({ label: c, value: c }))}
+                selected={filters.companhia}
+                onChange={(val) => setFilters({ ...filters, companhia: val })}
+                placeholder="Selecione companhias..."
+              />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Posto/Graduação</label>
-              <Select value={filters.posto} onValueChange={(value) => setFilters({ ...filters, posto: value === "all" ? "" : value })}>
-                <SelectTrigger data-testid="select-posto-filter">
-                  <SelectValue placeholder="Todos os postos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os postos</SelectItem>
-                  {RANKS.map(rank => (
-                    <SelectItem key={rank} value={rank}>{rank}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={RANKS.map(r => ({ label: r, value: r }))}
+                selected={filters.posto}
+                onChange={(val) => setFilters({ ...filters, posto: val })}
+                placeholder="Selecione postos..."
+              />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Situação</label>
-              <Select value={filters.situacao} onValueChange={(value) => setFilters({ ...filters, situacao: value === "all" ? "" : value })}>
-                <SelectTrigger data-testid="select-situacao-filter">
-                  <SelectValue placeholder="Todas as situações" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as situações</SelectItem>
-                  {STATUSES.map(status => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={STATUSES.map(s => ({ label: s, value: s }))}
+                selected={filters.situacao}
+                onChange={(val) => setFilters({ ...filters, situacao: val })}
+                placeholder="Selecione situações..."
+              />
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Missão</label>
-              <Select value={filters.missaoOp} onValueChange={(value) => setFilters({ ...filters, missaoOp: value === "all" ? "" : value })}>
-                <SelectTrigger data-testid="select-missao-filter">
-                  <SelectValue placeholder="Todas as missões" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as missões</SelectItem>
-                  {MISSIONS.map(mission => (
-                    <SelectItem key={mission} value={mission}>{mission}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={MISSIONS.map(m => ({ label: m, value: m }))}
+                selected={filters.missaoOp}
+                onChange={(val) => setFilters({ ...filters, missaoOp: val })}
+                placeholder="Selecione missões..."
+              />
             </div>
 
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Seção/Fração</label>
+              <MultiSelect
+                options={uniqueSecoes.map(s => ({ label: s, value: s }))}
+                selected={filters.secaoFracao}
+                onChange={(val) => setFilters({ ...filters, secaoFracao: val })}
+                placeholder="Selecione seções..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Função</label>
+              <MultiSelect
+                options={uniqueFuncoes.map(f => ({ label: f, value: f }))}
+                selected={filters.funcao}
+                onChange={(val) => setFilters({ ...filters, funcao: val })}
+                placeholder="Selecione funções..."
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-3">
               <label className="text-sm font-medium">Busca por Nome/CPF/Identidade</label>
               <Input
                 placeholder="Digite nome, CPF ou identidade..."
@@ -434,6 +499,43 @@ export default function Relatorios() {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Seletor de Colunas */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Columns className="h-5 w-5 text-primary" />
+              <CardTitle>Colunas do Relatório</CardTitle>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={selectAllColumns}>Selecionar Todas</Button>
+              <Button variant="ghost" size="sm" onClick={clearColumns}>Limpar</Button>
+            </div>
+          </div>
+          <CardDescription>
+            Escolha quais colunas aparecerão nos arquivos Excel e PDF.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-32 rounded-md border p-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+              {AVAILABLE_COLUMNS.map((col) => (
+                <div key={col.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${col.id}`}
+                    checked={selectedColumns.includes(col.id)}
+                    onCheckedChange={() => toggleColumn(col.id)}
+                  />
+                  <Label htmlFor={`col-${col.id}`} className="text-sm cursor-pointer">
+                    {col.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
         </CardContent>
       </Card>
 
@@ -470,14 +572,14 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Gera arquivo Excel (.xlsx) com formatação profissional, incluindo todos os campos:
-              ORD, P/GRAD, nome completo, companhia, função, situação, missão, CPF, telefone e email.
+              Gera arquivo Excel (.xlsx) com formatação profissional, incluindo as {selectedColumns.length} colunas selecionadas.
             </p>
             <Button
               variant="default"
               className="w-full"
               onClick={() => handleExport("excel")}
               data-testid="button-export-excel"
+              disabled={selectedColumns.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar {filteredMilitares.length} Militar(es) em Excel
@@ -497,14 +599,14 @@ export default function Relatorios() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Gera relatório PDF com formatação militar profissional, incluindo cabeçalho do
-              Exército Brasileiro, 7º BIS, data/hora do relatório e tabela formatada.
+              Gera relatório PDF com formatação militar profissional, incluindo as {selectedColumns.length} colunas selecionadas.
             </p>
             <Button
               variant="default"
               className="w-full"
               onClick={() => handleExport("pdf")}
               data-testid="button-export-pdf"
+              disabled={selectedColumns.length === 0}
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar {filteredMilitares.length} Militar(es) em PDF

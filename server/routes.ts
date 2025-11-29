@@ -607,7 +607,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Export routes (authenticated users only)
   app.get('/api/export/excel', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
     try {
-      const { filter_id, filter_tree, companhia, posto, situacao, missaoOp, search } = req.query;
+      const { filter_id, filter_tree, search } = req.query;
+
+      // Handle multi-value filters (arrays)
+      // Express parses ?param=a&param=b as array, but ?param=a as string
+      // We normalize everything to array or undefined
+      const normalizeArray = (val: any) => {
+        if (!val) return undefined;
+        return Array.isArray(val) ? val : [val];
+      };
+
+      const companhia = normalizeArray(req.query.companhia);
+      const posto = normalizeArray(req.query.posto);
+      const situacao = normalizeArray(req.query.situacao);
+      const missaoOp = normalizeArray(req.query.missaoOp);
+      const secaoFracao = normalizeArray(req.query.secaoFracao);
+      const funcao = normalizeArray(req.query.funcao);
+
+      // Handle column selection
+      const columns = normalizeArray(req.query.columns);
 
       let militares;
 
@@ -636,13 +654,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid filter tree format" });
         }
       }
-      // Prioridade 3: filtros simples (compatibilidade retroativa)
-      else if (companhia || posto || situacao || missaoOp || search) {
+      // Prioridade 3: filtros simples (compatibilidade retroativa + novos filtros)
+      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || search) {
         const simpleTree = simpleFiltersToTree({
-          companhia: companhia as string,
-          posto: posto as string,
-          situacao: situacao as string,
-          missaoOp: missaoOp as string,
+          companhia,
+          posto,
+          situacao,
+          missaoOp,
+          secaoFracao,
+          funcao,
           search: search as string,
         });
         militares = await storage.getMilitaryPersonnelWithFilter(simpleTree);
@@ -660,7 +680,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Gera arquivo Excel
       const { generateExcel } = await import('./exportService');
-      const excelBuffer = generateExcel(militares, customFields);
+      const excelBuffer = generateExcel(militares, customFields, columns as string[]);
 
       // Define headers para download
       const fileName = `efetivo_militar_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -678,7 +698,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/export/pdf', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
     try {
-      const { filter_id, filter_tree, companhia, posto, situacao, missaoOp, search } = req.query;
+      const { filter_id, filter_tree, search } = req.query;
+
+      // Handle multi-value filters (arrays)
+      const normalizeArray = (val: any) => {
+        if (!val) return undefined;
+        return Array.isArray(val) ? val : [val];
+      };
+
+      const companhia = normalizeArray(req.query.companhia);
+      const posto = normalizeArray(req.query.posto);
+      const situacao = normalizeArray(req.query.situacao);
+      const missaoOp = normalizeArray(req.query.missaoOp);
+      const secaoFracao = normalizeArray(req.query.secaoFracao);
+      const funcao = normalizeArray(req.query.funcao);
+
+      // Handle column selection
+      const columns = normalizeArray(req.query.columns);
 
       let militares;
 
@@ -707,13 +743,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Invalid filter tree format" });
         }
       }
-      // Prioridade 3: filtros simples (compatibilidade retroativa)
-      else if (companhia || posto || situacao || missaoOp || search) {
+      // Prioridade 3: filtros simples (compatibilidade retroativa + novos filtros)
+      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || search) {
         const simpleTree = simpleFiltersToTree({
-          companhia: companhia as string,
-          posto: posto as string,
-          situacao: situacao as string,
-          missaoOp: missaoOp as string,
+          companhia,
+          posto,
+          situacao,
+          missaoOp,
+          secaoFracao,
+          funcao,
           search: search as string,
         });
         militares = await storage.getMilitaryPersonnelWithFilter(simpleTree);
@@ -731,7 +769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Gera arquivo PDF
       const { generatePDF } = await import('./exportService');
-      const pdfBuffer = generatePDF(militares, customFields);
+      const pdfBuffer = generatePDF(militares, customFields, columns as string[]);
 
       // Define headers para download
       const fileName = `efetivo_militar_${new Date().toISOString().split('T')[0]}.pdf`;

@@ -33,14 +33,14 @@ function buildCustomFieldPredicate(
 ): SQL | undefined {
   // JSONB extraction: customFields->>'fieldName' returns text
   const jsonbExtract = sql`${militaryPersonnel.customFields}->>${fieldName}`;
-  
+
   switch (comparator) {
     case '=':
       return sql`${jsonbExtract} = ${value}`;
-    
+
     case '!=':
       return sql`${jsonbExtract} != ${value}`;
-    
+
     case 'IN':
       if (!Array.isArray(value)) {
         console.warn(`Valor deve ser array para operador IN`);
@@ -51,7 +51,7 @@ function buildCustomFieldPredicate(
       if (value.length === 0) return undefined;
       const inValues = value.map(v => sql`${v}`);
       return sql`${jsonbExtract} IN (${sql.join(inValues, sql`, `)})`;
-    
+
     case 'NOT IN':
       if (!Array.isArray(value)) {
         console.warn(`Valor deve ser array para operador NOT IN`);
@@ -61,26 +61,26 @@ function buildCustomFieldPredicate(
       if (value.length === 0) return undefined;
       const notInValues = value.map(v => sql`${v}`);
       return sql`${jsonbExtract} NOT IN (${sql.join(notInValues, sql`, `)})`;
-    
+
     case 'LIKE':
       return sql`${jsonbExtract} LIKE ${value}`;
-    
+
     case 'ILIKE':
       return sql`${jsonbExtract} ILIKE ${value}`;
-    
+
     case '>':
       // For numeric comparisons, cast to numeric
       return sql`(${jsonbExtract})::numeric > ${value}`;
-    
+
     case '<':
       return sql`(${jsonbExtract})::numeric < ${value}`;
-    
+
     case '>=':
       return sql`(${jsonbExtract})::numeric >= ${value}`;
-    
+
     case '<=':
       return sql`(${jsonbExtract})::numeric <= ${value}`;
-    
+
     default:
       console.warn(`Comparador desconhecido: ${comparator}`);
       return undefined;
@@ -93,15 +93,15 @@ function buildCustomFieldPredicate(
  */
 function buildConditionPredicate(condition: FilterCondition): SQL | undefined {
   const fieldStr = condition.field as string;
-  
+
   // Check if it's a custom field (pattern: customFields.fieldName)
   if (fieldStr.startsWith('customFields.')) {
     const customFieldName = fieldStr.substring('customFields.'.length);
     return buildCustomFieldPredicate(customFieldName, condition.comparator, condition.value);
   }
-  
+
   const column = fieldMap[fieldStr];
-  
+
   if (!column) {
     console.warn(`Campo desconhecido no filtro: ${fieldStr}`);
     return undefined;
@@ -112,42 +112,42 @@ function buildConditionPredicate(condition: FilterCondition): SQL | undefined {
   switch (comparator) {
     case '=':
       return eq(column, value as string);
-    
+
     case '!=':
       return ne(column, value as string);
-    
+
     case 'IN':
       if (!Array.isArray(value)) {
         console.warn(`Valor deve ser array para operador IN`);
         return undefined;
       }
       return inArray(column, value);
-    
+
     case 'NOT IN':
       if (!Array.isArray(value)) {
         console.warn(`Valor deve ser array para operador NOT IN`);
         return undefined;
       }
       return notInArray(column, value);
-    
+
     case 'LIKE':
       return like(column, value as string);
-    
+
     case 'ILIKE':
       return ilike(column, value as string);
-    
+
     case '>':
       return gt(column, value as string | number);
-    
+
     case '<':
       return lt(column, value as string | number);
-    
+
     case '>=':
       return gte(column, value as string | number);
-    
+
     case '<=':
       return lte(column, value as string | number);
-    
+
     default:
       console.warn(`Comparador desconhecido: ${comparator}`);
       return undefined;
@@ -162,7 +162,7 @@ function buildGroupPredicate(group: FilterGroup): SQL | undefined {
 
   for (const child of group.children) {
     let predicate: SQL | undefined;
-    
+
     if (child.type === 'condition') {
       predicate = buildConditionPredicate(child);
     } else {
@@ -182,7 +182,7 @@ function buildGroupPredicate(group: FilterGroup): SQL | undefined {
     return predicates[0];
   }
 
-  return group.operator === 'AND' 
+  return group.operator === 'AND'
     ? and(...predicates)
     : or(...predicates);
 }
@@ -222,49 +222,44 @@ export function buildFilterPredicate(filterTree: FilterTree): SQL | undefined {
  * Garante compatibilidade retroativa
  */
 export function simpleFiltersToTree(filters: {
-  companhia?: string;
-  posto?: string;
-  situacao?: string;
-  missaoOp?: string;
+  companhia?: string | string[];
+  posto?: string | string[];
+  situacao?: string | string[];
+  missaoOp?: string | string[];
+  secaoFracao?: string | string[];
+  funcao?: string | string[];
   search?: string;
 }): FilterTree {
   const conditions: FilterCondition[] = [];
 
-  if (filters.companhia) {
-    conditions.push({
-      type: "condition",
-      field: "companhia",
-      comparator: "=",
-      value: filters.companhia,
-    });
-  }
+  const addCondition = (field: string, value: string | string[] | undefined) => {
+    if (!value) return;
 
-  if (filters.posto) {
-    conditions.push({
-      type: "condition",
-      field: "postoGraduacao",
-      comparator: "=",
-      value: filters.posto,
-    });
-  }
+    if (Array.isArray(value)) {
+      if (value.length > 0) {
+        conditions.push({
+          type: "condition",
+          field: field as any,
+          comparator: "IN",
+          value: value,
+        });
+      }
+    } else {
+      conditions.push({
+        type: "condition",
+        field: field as any,
+        comparator: "=",
+        value: value,
+      });
+    }
+  };
 
-  if (filters.situacao) {
-    conditions.push({
-      type: "condition",
-      field: "situacao",
-      comparator: "=",
-      value: filters.situacao,
-    });
-  }
-
-  if (filters.missaoOp) {
-    conditions.push({
-      type: "condition",
-      field: "missaoOp",
-      comparator: "=",
-      value: filters.missaoOp,
-    });
-  }
+  addCondition("companhia", filters.companhia);
+  addCondition("postoGraduacao", filters.posto);
+  addCondition("situacao", filters.situacao);
+  addCondition("missaoOp", filters.missaoOp);
+  addCondition("secaoFracao", filters.secaoFracao);
+  addCondition("funcao", filters.funcao);
 
   if (filters.search) {
     // Busca textual - cria um grupo OR para buscar em múltiplos campos
@@ -278,7 +273,7 @@ export function simpleFiltersToTree(filters: {
         { type: "condition", field: "identidade", comparator: "ILIKE", value: `%${filters.search}%` },
       ],
     };
-    
+
     // Se já temos outras condições, cria um AND entre elas e o grupo de busca
     if (conditions.length > 0) {
       return {
