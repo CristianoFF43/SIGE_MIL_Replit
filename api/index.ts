@@ -27,7 +27,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     // Dynamic import to catch module not found errors
-    const { createApp } = await import('../server/app.js');
+    const { createApp } = await import('./_lib/app.js');
     const { app } = await createApp();
     app(req, res);
   } catch (error: any) {
