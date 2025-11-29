@@ -140,6 +140,10 @@ function CompanyCard({ company, isOverlay, className, dragHandle }: CompanyCardP
   );
 }
 
+interface SortableCardProps {
+  company: CompanyData;
+}
+
 function SortableCard({ company }: SortableCardProps) {
   const {
     attributes,

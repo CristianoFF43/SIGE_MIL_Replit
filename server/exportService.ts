@@ -239,7 +239,7 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
     },
     didDrawPage: function (data: any) {
       // Rodapé com número da página
-      const str = 'Página ' + doc.internal.getNumberOfPages();
+      const str = 'Página ' + doc.getNumberOfPages();
 
       doc.setFontSize(8);
       doc.setTextColor(100);
