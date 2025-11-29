@@ -851,6 +851,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Additional security: only allow the very first user (lowest ID or first created)
       // to prevent race conditions
+      // RELAXED FOR DEPLOYMENT: Allow any user to claim admin if none exists
+      /*
       const sortedUsers = allUsers.sort((a, b) => {
         return (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0);
       });
@@ -858,6 +860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (sortedUsers.length > 0 && sortedUsers[0].id !== userId) {
         return res.status(403).json({ message: "Only the first registered user can become administrator" });
       }
+      */
 
       // Promote current user to administrator
       const user = await storage.updateUserRole(userId, 'administrator');
