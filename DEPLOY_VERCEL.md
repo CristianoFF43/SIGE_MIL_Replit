@@ -1,57 +1,67 @@
-# SIGE-MIL - Sistema de Gestão Militar
+# Guia de Deploy no Vercel (Atualizado)
 
-## 🚀 Deploy no Vercel
+Este guia contém o passo-a-passo para colocar o **SIGE-MIL** no ar usando a nova arquitetura serverless.
 
-O projeto foi corrigido e está funcionando perfeitamente localmente! 
+## 1. Preparação no Vercel
 
-### ✅ Status Atual:
-- **Frontend**: Build completo e funcionando
-- **Backend**: Servidor rodando em localhost:5000
-- **Erros**: Todos corrigidos (conflito useAuth, TypeScript, etc.)
+1.  Acesse o dashboard da [Vercel](https://vercel.com/dashboard).
+2.  Se houver projetos antigos do SIGE-MIL que não estão funcionando, **apague-os** para evitar conflitos.
+3.  Clique em **"Add New..."** -> **"Project"**.
 
-### 📁 Arquivos de Build:
-Os arquivos estáticos foram gerados em `dist/public/`:
-- `index.html` - Página principal
-- `assets/` - CSS, JS e imagens
-- `favicon.png` - Ícone do sistema
+## 2. Importando o Repositório
 
-### 🔧 Como fazer Deploy:
+1.  Na lista de repositórios do GitHub, encontre o **`SIGE_MIL_Replit`**.
+2.  Clique no botão **"Import"**.
 
-#### Opção 1: Deploy Manual no Vercel
-1. Acesse [vercel.com](https://vercel.com)
-2. Importe este repositório
-3. Configure as variáveis de ambiente (ver abaixo)
-4. Use o comando de build: `npm run build:vercel`
-5. Diretório de saída: `dist/public`
+## 3. Configuração do Projeto (IMPORTANTE)
 
-#### Opção 2: Deploy via CLI
-```bash
-npm i -g vercel
-vercel --prod
-```
+Na tela de configuração ("Configure Project"):
 
-### 🔐 Variáveis de Ambiente Necessárias:
-```bash
-# Firebase (obrigatório)
-VITE_FIREBASE_PROJECT_ID=seu-projeto-id
-VITE_FIREBASE_APP_ID=seu-app-id
-VITE_FIREBASE_API_KEY=sua-api-key
+### Framework Preset
+*   Deixe como **Vite** (ou "Other" se preferir, o arquivo `vercel.json` vai gerenciar isso, mas Vite é o padrão seguro).
 
-# Banco de Dados (obrigatório)
-DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+### Root Directory
+*   Deixe como `./` (padrão).
 
-# Opcionais
-PORT=5000
-NODE_ENV=production
-```
+### Build and Output Settings
+*   **Build Command**: `npm run build:vercel` (Se não estiver assim, ative o "Override" e digite isso).
+*   **Output Directory**: `dist/public` (Se não estiver assim, ative o "Override" e digite isso).
+*   **Install Command**: `npm install` (Padrão).
 
-### 🎯 Funcionalidades:
-- ✅ Sistema de autenticação completo
-- ✅ Gestão de usuários com permissões
-- ✅ Importação de dados militares
-- ✅ Dashboard com estatísticas
-- ✅ Filtros avançados
-- ✅ Exportação de relatórios
+### Environment Variables (CRÍTICO 🚨)
+Você **PRECISA** adicionar as variáveis de ambiente aqui, pois o arquivo `.env` não é enviado para o GitHub por segurança.
 
-### 📞 Suporte:
-O sistema está totalmente funcional! Qualquer problema no deploy, me avise que ajudo a resolver.
+Clique em **Environment Variables** e adicione uma por uma:
+
+| Nome (Key) | Valor (Value) |
+| :--- | :--- |
+| `DATABASE_URL` | A URL de conexão do seu banco (Neon ou Supabase). Ex: `postgres://user:pass@host/db...` |
+| `VITE_FIREBASE_PROJECT_ID` | O ID do seu projeto Firebase |
+| `VITE_FIREBASE_APP_ID` | O App ID do Firebase |
+| `VITE_FIREBASE_API_KEY` | A API Key do Firebase |
+| `SESSION_SECRET` | Uma senha longa e aleatória para criptografar sessões (invente uma) |
+| `NODE_ENV` | `production` |
+
+> **Dica:** Se você tiver o arquivo `.env` local salvo em algum lugar, pode copiar o conteúdo e colar na opção de "Paste .env" da Vercel para adicionar tudo de uma vez.
+
+## 4. Finalizando
+
+1.  Clique em **"Deploy"**.
+2.  Aguarde o processo de build.
+    *   A Vercel vai instalar as dependências.
+    *   Vai rodar o comando de build.
+    *   Vai configurar as funções serverless (`api/index.ts`).
+3.  Se tudo der certo, você verá a tela de "Congratulations!".
+
+## 5. Testando
+
+*   Acesse a URL gerada (ex: `sige-mil-replit.vercel.app`).
+*   Tente fazer login.
+*   Verifique se os dados carregam.
+
+---
+
+### Solução de Problemas Comuns
+
+*   **Erro 500 / "Internal Server Error"**: Geralmente é `DATABASE_URL` errada ou faltando. Verifique as variáveis de ambiente.
+*   **Tela Branca**: Pode ser erro nas variáveis do Firebase (`VITE_...`). Verifique se estão corretas.
