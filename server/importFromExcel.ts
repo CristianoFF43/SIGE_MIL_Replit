@@ -118,11 +118,14 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'observações': 'observacoes',
   'observacao': 'observacoes',
   'temp': 'temp',
+  'temporario': 'temp',
+  'temporário': 'temp',
+  't': 'temp',
 };
 
 // Remove espaços extras e converte para string
 const cleanStr = (val: any) => {
-  if (!val) return undefined;
+  if (val === null || val === undefined) return undefined;
   const str = String(val).trim();
   return str === '' ? undefined : str;
 };
