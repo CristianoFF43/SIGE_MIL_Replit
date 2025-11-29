@@ -17,10 +17,10 @@ export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  
+
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  
+
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
@@ -31,13 +31,16 @@ export default function LoginPage() {
     try {
       const user = await signInWithGoogle();
       console.log("[LOGIN] Login com Google bem-sucedido:", user.email);
-      
+
       toast({
         title: "Login realizado",
         description: `Bem-vindo, ${user.displayName || user.email}!`,
       });
-      
-      setLocation("/");
+
+      // Força um recarregamento para garantir que o estado de autenticação seja atualizado
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 500);
     } catch (error: any) {
       console.error("Erro no login:", error);
       toast({
@@ -78,13 +81,16 @@ export default function LoginPage() {
     try {
       const user = await signInWithEmail(loginEmail, loginPassword);
       console.log("[LOGIN] Login com email bem-sucedido:", user.email);
-      
+
       toast({
         title: "Login realizado",
         description: `Bem-vindo, ${user.email}!`,
       });
-      
-      setLocation("/");
+
+      // Força um recarregamento para garantir que o estado de autenticação seja atualizado
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 500);
     } catch (error: any) {
       console.error("Erro no login:", error);
       toast({
@@ -134,13 +140,16 @@ export default function LoginPage() {
     try {
       const user = await registerWithEmail(registerEmail, registerPassword);
       console.log("[LOGIN] Registro bem-sucedido:", user.email);
-      
+
       toast({
         title: "Conta criada",
         description: `Bem-vindo, ${user.email}!`,
       });
-      
-      setLocation("/");
+
+      // Força um recarregamento para garantir que o estado de autenticação seja atualizado
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 500);
     } catch (error: any) {
       console.error("Erro no registro:", error);
       toast({
@@ -155,13 +164,13 @@ export default function LoginPage() {
 
   async function handleTestLogin() {
     if (!isTestMode) return;
-    
+
     setLoading(true);
     try {
       const testSecret = import.meta.env.VITE_TEST_AUTH_SECRET || 'test-secret-123';
       const sub = `test-user-${Date.now()}`;
       const email = `testuser${Date.now()}@test.com`;
-      
+
       const response = await fetch('/api/test-login', {
         method: 'POST',
         headers: {
@@ -176,19 +185,19 @@ export default function LoginPage() {
           role: 'user',
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Test login failed');
       }
-      
+
       const data = await response.json();
       console.log('[TEST-LOGIN] Success:', data);
-      
+
       toast({
         title: "Test Login",
         description: `Logged in as ${data.user.email}`,
       });
-      
+
       setTimeout(() => {
         window.location.href = '/';
       }, 500);
@@ -218,7 +227,7 @@ export default function LoginPage() {
             </CardDescription>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           <Tabs defaultValue="google" className="space-y-4">
             <TabsList className="grid w-full grid-cols-3">
@@ -235,7 +244,7 @@ export default function LoginPage() {
                 Criar Conta
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="google" className="space-y-4">
               <div className="text-sm text-muted-foreground text-center mb-4">
                 Entre com sua conta Google. Você poderá escolher qual email usar.
@@ -251,7 +260,7 @@ export default function LoginPage() {
                 {loading ? "Entrando..." : "Entrar com Google"}
               </Button>
             </TabsContent>
-            
+
             <TabsContent value="login">
               <form onSubmit={handleEmailLogin} className="space-y-4">
                 <div className="space-y-2">
@@ -266,7 +275,7 @@ export default function LoginPage() {
                     data-testid="input-login-email"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="login-password">Senha</Label>
                   <Input
@@ -279,7 +288,7 @@ export default function LoginPage() {
                     data-testid="input-login-password"
                   />
                 </div>
-                
+
                 <Button
                   type="submit"
                   disabled={loading}
@@ -291,7 +300,7 @@ export default function LoginPage() {
                 </Button>
               </form>
             </TabsContent>
-            
+
             <TabsContent value="register">
               <form onSubmit={handleEmailRegister} className="space-y-4">
                 <div className="space-y-2">
@@ -306,7 +315,7 @@ export default function LoginPage() {
                     data-testid="input-register-email"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="register-password">Senha</Label>
                   <Input
@@ -321,7 +330,7 @@ export default function LoginPage() {
                   />
                   <p className="text-xs text-muted-foreground">Mínimo 6 caracteres</p>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="register-confirm">Confirmar Senha</Label>
                   <Input
@@ -335,7 +344,7 @@ export default function LoginPage() {
                     data-testid="input-register-confirm"
                   />
                 </div>
-                
+
                 <Button
                   type="submit"
                   disabled={loading}
@@ -348,7 +357,7 @@ export default function LoginPage() {
               </form>
             </TabsContent>
           </Tabs>
-          
+
           {isTestMode && (
             <div className="mt-4 pt-4 border-t">
               <div className="text-xs text-muted-foreground text-center mb-2">
