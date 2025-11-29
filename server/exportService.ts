@@ -49,9 +49,6 @@ export function applyFilters(militares: MilitaryPersonnel[], filters: ExportFilt
 /**
  * Gera arquivo Excel com formatação profissional
  */
-/**
- * Gera arquivo Excel com formatação profissional
- */
 export function generateExcel(militares: MilitaryPersonnel[], customFields: CustomFieldDefinition[] = [], selectedColumns?: string[]): Buffer {
   // Prepara os dados para exportação
   const data = militares.map(m => {
@@ -150,27 +147,27 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
 
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('EXÉRCITO BRASILEIRO', pageWidth / 2, 15, { align: 'center' });
+  doc.text('EXÉRCITO BRASILEIRO', pageWidth / 2, 10, { align: 'center' });
 
   doc.setFontSize(14);
-  doc.text('7º BATALHÃO DE INFANTARIA DE SELVA', pageWidth / 2, 22, { align: 'center' });
+  doc.text('7º BATALHÃO DE INFANTARIA DE SELVA', pageWidth / 2, 16, { align: 'center' });
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
-  doc.text('RELATÓRIO DE EFETIVO MILITAR', pageWidth / 2, 29, { align: 'center' });
+  doc.text('RELATÓRIO DE EFETIVO MILITAR', pageWidth / 2, 22, { align: 'center' });
 
   // Data e hora do relatório
   const now = new Date();
   const dataHora = `${now.toLocaleDateString('pt-BR')} - ${now.toLocaleTimeString('pt-BR')}`;
   doc.setFontSize(9);
   doc.setTextColor(100);
-  doc.text(`Gerado em: ${dataHora}`, pageWidth / 2, 35, { align: 'center' });
+  doc.text(`Gerado em: ${dataHora}`, pageWidth / 2, 27, { align: 'center' });
   doc.setTextColor(0);
 
   // Total de militares
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Total de militares: ${militares.length}`, 14, 42);
+  doc.text(`Total de militares: ${militares.length}`, 5, 33);
 
   // Definição de todos os dados possíveis
   const allHeadersMap: Record<string, (m: MilitaryPersonnel) => string> = {
@@ -216,7 +213,7 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
   autoTable(doc, {
     head: [headersToUse],
     body: tableData,
-    startY: 47,
+    startY: 36,
     theme: 'grid',
     headStyles: {
       fillColor: [76, 175, 80], // Verde militar
@@ -227,38 +224,50 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
     },
     bodyStyles: {
       fontSize: 7,
-      cellPadding: 2,
+      cellPadding: 1, // Reduced padding
     },
-    // Auto-adjust column widths
+    // Compact layout settings
     styles: {
-      overflow: 'linebreak',
-      cellWidth: 'wrap'
+      overflow: 'ellipsize', // Prevent expansion, truncate if needed
+      cellWidth: 'auto',
+      minCellHeight: 5,
+    },
+    // Specific column styles to keep it compact
+    columnStyles: {
+      // ORD usually small
+      0: { cellWidth: 'auto', halign: 'center' },
     },
     didDrawPage: function (data: any) {
       // Rodapé com número da página
-      // Correção da numeração de páginas: Pag X de Y
-      const pageCount = doc.internal.getNumberOfPages();
-      const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+      const str = 'Página ' + doc.internal.getNumberOfPages();
 
       doc.setFontSize(8);
       doc.setTextColor(100);
+
+      const pageSize = doc.internal.pageSize;
+      const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+
       doc.text(
-        `Página ${currentPage} de ${pageCount}`,
-        pageWidth / 2,
-        doc.internal.pageSize.getHeight() - 10,
-        { align: 'center' }
+        str + ' de {total_pages_count_string}',
+        data.settings.margin.left,
+        pageHeight - 5
       );
 
       doc.text(
         '7º BIS - Sistema de Gestão de Efetivo',
-        14,
-        doc.internal.pageSize.getHeight() - 10
+        pageWidth - 60,
+        pageHeight - 5
       );
 
       doc.setTextColor(0);
     },
-    margin: { top: 47, left: 14, right: 14, bottom: 20 },
+    margin: { top: 36, left: 5, right: 5, bottom: 10 }, // Narrow margins
   });
+
+  // Replace total pages alias
+  if (typeof doc.putTotalPages === 'function') {
+    doc.putTotalPages('{total_pages_count_string}');
+  }
 
   // Retorna buffer do PDF
   return Buffer.from(doc.output('arraybuffer'));
