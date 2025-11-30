@@ -254,12 +254,26 @@ export async function importFromExcelFile(fileId: string) {
 
     // Baixa o arquivo do Google Drive
     console.log('Downloading file from Google Drive...');
-    const response = await drive.files.get({
-      fileId: fileId,
-      alt: 'media',
-    }, {
-      responseType: 'arraybuffer'
-    });
+    let response;
+
+    try {
+      // Tenta baixar como arquivo binário (para arquivos Excel enviados via upload)
+      response = await drive.files.get({
+        fileId: fileId,
+        alt: 'media',
+      }, {
+        responseType: 'arraybuffer'
+      });
+    } catch (downloadError: any) {
+      console.log('Direct download failed, trying to export as Excel (likely a native Google Sheet)...');
+      // Se falhar, tenta exportar como Excel (para planilhas nativas do Google Sheets)
+      response = await drive.files.export({
+        fileId: fileId,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }, {
+        responseType: 'arraybuffer'
+      });
+    }
 
     // Processa o arquivo Excel
     console.log('Processing Excel file...');
