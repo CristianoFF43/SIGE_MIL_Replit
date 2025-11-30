@@ -164,8 +164,9 @@ export class DatabaseStorage implements IStorage {
     // For administrators, always enforce the latest default permissions
     // This ensures they always have access to new features (like import)
     // regardless of what is stored in the database.
-    if (role === 'administrator') {
-      return defaults;
+    // Case-insensitive check and trim whitespace
+    if (role && role.trim().toLowerCase() === 'administrator') {
+      return DEFAULT_PERMISSIONS.administrator;
     }
 
     if (!defaults) return storedPermissions;
