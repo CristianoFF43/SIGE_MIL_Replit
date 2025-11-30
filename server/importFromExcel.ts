@@ -75,8 +75,13 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'companhia': 'companhia',
   'sec/fracao': 'secaoFracao',
   'seção/fracao': 'secaoFracao',
+  'secao/fracao': 'secaoFracao',
+  'seção/fração': 'secaoFracao',
+  'sec / fracao': 'secaoFracao',
+  'seção / fração': 'secaoFracao',
   'secao': 'secaoFracao',
   'fracao': 'secaoFracao',
+  'fração': 'secaoFracao',
   'funcao': 'funcao',
   'função': 'funcao',
   'data/praca': 'dataPraca',
@@ -118,6 +123,7 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'observações': 'observacoes',
   'observacao': 'observacoes',
   'temp': 'temp',
+  'tempo': 'temp',
   'temporario': 'temp',
   'temporário': 'temp',
   't': 'temp',
@@ -132,6 +138,9 @@ const cleanStr = (val: any) => {
 
 const cleanNum = (val: any) => {
   if (!val) return undefined;
+  // Se for string "Ord", "Nr", etc, retorna undefined (evita header repetido)
+  if (typeof val === 'string' && /^(ord|nr|num|núm)/i.test(val.trim())) return undefined;
+
   const num = parseInt(String(val).trim());
   return isNaN(num) ? undefined : num;
 };
@@ -213,7 +222,14 @@ function parseRow(row: any[], columnMapping: ColumnMapping[]): RawMilitaryData |
   }
 
   // Validação: campos obrigatórios
+  // Se parecer um cabeçalho repetido (ex: nomeCompleto == "Nome Completo"), ignora
+  if (result.nomeCompleto && /^(nome|nome completo|name)$/i.test(result.nomeCompleto)) {
+    return null;
+  }
+
   if (!result.postoGraduacao || !result.nomeCompleto || !result.companhia) {
+    // Log para debug (opcional, mas útil)
+    // console.log('Skipping invalid row:', JSON.stringify(result));
     return null; // Linha inválida sem campos obrigatórios
   }
 
