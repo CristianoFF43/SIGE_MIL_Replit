@@ -60,3 +60,6 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 
 ### 2026-01-25 03:06
 - Corrigido refresh de token no client (apiRequest + queries) para evitar erro de exportacao quando o ID token expira.
+
+### 2026-01-25 03:26
+- Corrigido endpoint de exportacao PDF: faltava normalizar `temp` (ReferenceError causava 500).

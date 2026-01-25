@@ -641,6 +641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const secaoFracao = normalizeArray(req.query.secaoFracao);
       const funcao = normalizeArray(req.query.funcao);
       const temp = normalizeArray(req.query.temp);
+      const temp = normalizeArray(req.query.temp);
 
       // Handle column selection
       const columns = normalizeArray(req.query.columns);
