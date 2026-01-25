@@ -54,6 +54,11 @@ export interface IStorage {
     field: string;
     data: Array<{ name: string; value: number }>;
   }>;
+  getCrossStats(fieldX: string, fieldY: string): Promise<{
+    fieldX: string;
+    fieldY: string;
+    data: Array<{ x: string; y: string; value: number }>;
+  }>;
   getCustomFieldDefinitions(): Promise<CustomFieldDefinition[]>;
 
   // Saved Filter Groups operations
@@ -442,6 +447,50 @@ export class DatabaseStorage implements IStorage {
 
     return {
       field: fieldName,
+      data,
+    };
+  }
+
+  // Cross stats - aggregates data for two fields (standard or custom)
+  async getCrossStats(fieldX: string, fieldY: string): Promise<{ fieldX: string; fieldY: string; data: Array<{ x: string; y: string; value: number }> }> {
+    const allPersonnel = await this.getAllMilitaryPersonnel();
+    const aggregation: Record<string, Record<string, number>> = {};
+
+    const getFieldValue = (person: MilitaryPersonnel, fieldName: string) => {
+      if (fieldName.startsWith('customFields.')) {
+        const customFieldName = fieldName.replace('customFields.', '');
+        const customFieldsData = person.customFields as Record<string, any>;
+        return customFieldsData?.[customFieldName];
+      }
+      return (person as any)[fieldName];
+    };
+
+    allPersonnel.forEach((person) => {
+      const xValue = getFieldValue(person, fieldX);
+      const yValue = getFieldValue(person, fieldY);
+
+      if (xValue === null || xValue === undefined || xValue === '') return;
+      if (yValue === null || yValue === undefined || yValue === '') return;
+
+      const xKey = String(xValue);
+      const yKey = String(yValue);
+
+      if (!aggregation[xKey]) {
+        aggregation[xKey] = {};
+      }
+      aggregation[xKey][yKey] = (aggregation[xKey][yKey] || 0) + 1;
+    });
+
+    const data: Array<{ x: string; y: string; value: number }> = [];
+    for (const [xKey, yMap] of Object.entries(aggregation)) {
+      for (const [yKey, value] of Object.entries(yMap)) {
+        data.push({ x: xKey, y: yKey, value });
+      }
+    }
+
+    return {
+      fieldX,
+      fieldY,
       data,
     };
   }

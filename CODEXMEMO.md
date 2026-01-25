@@ -53,3 +53,7 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 - Ajustado comparacao nos dashboards para unir categorias e evitar colisao de labels nos graficos.
 - Filtros TEMP: normalizacao de valores no front (relatorios) e suporte completo no backend (filterBuilder + export).
 - Efetivo Militar: situacao agora mostra badge colorido mesmo em modo edicao (mobile).
+
+### 2026-01-25 02:16
+- Revisado comparacao nos dashboards para usar interseccao entre metricas via novo endpoint /api/stats/cross (cada metrica em um eixo/serie).
+- Exportacao: filtros TEMP aplicados corretamente mesmo quando sao o unico filtro.

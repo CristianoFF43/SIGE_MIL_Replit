@@ -285,6 +285,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cross stats route - returns aggregated data for two fields
+  app.get('/api/stats/cross', isAuthenticated, requirePermission("dashboard", "view"), async (req, res) => {
+    try {
+      const { fieldX, fieldY } = req.query;
+
+      if (!fieldX || !fieldY || typeof fieldX !== 'string' || typeof fieldY !== 'string') {
+        return res.status(400).json({ message: "fieldX and fieldY parameters are required" });
+      }
+
+      const stats = await storage.getCrossStats(fieldX, fieldY);
+      res.json(stats);
+    } catch (error) {
+      console.error(`Error fetching cross stats for fields ${req.query.fieldX} and ${req.query.fieldY}:`, error);
+      res.status(500).json({ message: "Failed to fetch cross stats" });
+    }
+  });
+
   // Get all available fields for dynamic stats (standard + custom)
   app.get('/api/stats/fields', isAuthenticated, requirePermission("dashboard", "view"), async (req, res) => {
     try {
@@ -656,7 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       // Prioridade 3: filtros simples (compatibilidade retroativa + novos filtros)
-      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || search) {
+      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || temp || search) {
         const simpleTree = simpleFiltersToTree({
           companhia,
           posto,
@@ -746,7 +763,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       // Prioridade 3: filtros simples (compatibilidade retroativa + novos filtros)
-      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || search) {
+      else if (companhia || posto || situacao || missaoOp || secaoFracao || funcao || temp || search) {
         const simpleTree = simpleFiltersToTree({
           companhia,
           posto,

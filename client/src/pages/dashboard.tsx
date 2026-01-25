@@ -66,6 +66,12 @@ interface DynamicStatsResponse {
   data: Array<{ name: string; value: number }>;
 }
 
+interface CrossStatsResponse {
+  fieldX: string;
+  fieldY: string;
+  data: Array<{ x: string; y: string; value: number }>;
+}
+
 type ChartType = "bar" | "pie" | "line" | "area" | "radar" | "scatter" | "composed" | "radialBar";
 
 const COLORS = [
@@ -173,13 +179,13 @@ export default function Dashboard() {
     enabled: isAuthenticated && !!metric1,
   });
 
-  const { data: data1CompareResponse } = useQuery<DynamicStatsResponse>({
-    queryKey: ["/api/stats/dynamic", metric1Compare],
+  const { data: data1CrossResponse } = useQuery<CrossStatsResponse>({
+    queryKey: ["/api/stats/cross", metric1, metric1Compare],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric1Compare)}`);
+      const res = await apiRequest("GET", `/api/stats/cross?fieldX=${encodeURIComponent(metric1)}&fieldY=${encodeURIComponent(metric1Compare)}`);
       return res.json();
     },
-    enabled: isAuthenticated && compareMode1 && !!metric1Compare,
+    enabled: isAuthenticated && compareMode1 && !!metric1 && !!metric1Compare,
   });
 
   const { data: data2Response } = useQuery<DynamicStatsResponse>({
@@ -191,13 +197,13 @@ export default function Dashboard() {
     enabled: isAuthenticated && !!metric2,
   });
 
-  const { data: data2CompareResponse } = useQuery<DynamicStatsResponse>({
-    queryKey: ["/api/stats/dynamic", metric2Compare],
+  const { data: data2CrossResponse } = useQuery<CrossStatsResponse>({
+    queryKey: ["/api/stats/cross", metric2, metric2Compare],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric2Compare)}`);
+      const res = await apiRequest("GET", `/api/stats/cross?fieldX=${encodeURIComponent(metric2)}&fieldY=${encodeURIComponent(metric2Compare)}`);
       return res.json();
     },
-    enabled: isAuthenticated && compareMode2 && !!metric2Compare,
+    enabled: isAuthenticated && compareMode2 && !!metric2 && !!metric2Compare,
   });
 
   const { data: data3Response } = useQuery<DynamicStatsResponse>({
@@ -209,13 +215,13 @@ export default function Dashboard() {
     enabled: isAuthenticated && !!metric3,
   });
 
-  const { data: data3CompareResponse } = useQuery<DynamicStatsResponse>({
-    queryKey: ["/api/stats/dynamic", metric3Compare],
+  const { data: data3CrossResponse } = useQuery<CrossStatsResponse>({
+    queryKey: ["/api/stats/cross", metric3, metric3Compare],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric3Compare)}`);
+      const res = await apiRequest("GET", `/api/stats/cross?fieldX=${encodeURIComponent(metric3)}&fieldY=${encodeURIComponent(metric3Compare)}`);
       return res.json();
     },
-    enabled: isAuthenticated && compareMode3 && !!metric3Compare,
+    enabled: isAuthenticated && compareMode3 && !!metric3 && !!metric3Compare,
   });
 
   if (authLoading || isLoading) {
@@ -250,23 +256,39 @@ export default function Dashboard() {
     return field?.label || fieldName;
   };
 
-  const buildComparisonData = (primaryData: any[], compareData: any[]) => {
-    const primaryMap = new Map(primaryData.map(item => [item.name, item.value]));
-    const compareMap = new Map(compareData.map(item => [item.name, item.value]));
+  const sortCategories = (values: string[], fieldName: string) => {
+    if (fieldName === "postoGraduacao") {
+      return values.sort((a, b) => getRankOrder(a) - getRankOrder(b));
+    }
+    return values.sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  };
 
-    const names: string[] = [];
-    primaryData.forEach(item => names.push(item.name));
-    compareData.forEach(item => {
-      if (!primaryMap.has(item.name)) {
-        names.push(item.name);
-      }
+  const buildCrossDataset = (response: CrossStatsResponse | undefined, primaryField: string, compareField: string) => {
+    if (!response || !response.data) return { data: [], keys: [] as string[] };
+
+    const rowMap: Record<string, Record<string, number>> = {};
+    const xSet = new Set<string>();
+    const ySet = new Set<string>();
+
+    response.data.forEach((item) => {
+      xSet.add(item.x);
+      ySet.add(item.y);
+      if (!rowMap[item.x]) rowMap[item.x] = {};
+      rowMap[item.x][item.y] = item.value;
     });
 
-    return names.map(name => ({
-      name,
-      primary: primaryMap.get(name) || 0,
-      compare: compareMap.get(name) || 0,
-    }));
+    const xValues = sortCategories(Array.from(xSet), primaryField);
+    const yValues = sortCategories(Array.from(ySet), compareField);
+
+    const data = xValues.map((name) => {
+      const row: Record<string, any> = { name };
+      yValues.forEach((key) => {
+        row[key] = rowMap[name]?.[key] || 0;
+      });
+      return row;
+    });
+
+    return { data, keys: yValues };
   };
 
   // Renderizar gráfico baseado no tipo selecionado
@@ -276,7 +298,8 @@ export default function Dashboard() {
     height = 300,
     compareData?: any[],
     primaryLabel?: string,
-    compareLabel?: string
+    compareLabel?: string,
+    crossKeys?: string[]
   ) => {
     const tooltipStyle = {
       backgroundColor: "hsl(var(--popover))",
@@ -286,21 +309,34 @@ export default function Dashboard() {
 
     const hasComparison = compareData && compareData.length > 0;
 
+    if (hasComparison && (chartType === "pie" || chartType === "scatter" || chartType === "radialBar")) {
+      return (
+        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+          Comparação disponível apenas para gráficos de barra, linha, área, radar ou composto.
+        </div>
+      );
+    }
+
     switch (chartType) {
       case "bar":
         if (hasComparison) {
-          const mergedData = buildComparisonData(data, compareData);
-
           return (
             <ResponsiveContainer width="100%" height={height}>
-              <BarChart data={mergedData}>
+              <BarChart data={compareData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" angle={-45} textAnchor="end" height={100} />
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Bar dataKey="primary" name={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="compare" name={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                {(crossKeys || []).map((key, index) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    name={key}
+                    fill={COLORS[index % COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                  />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           );
@@ -343,34 +379,26 @@ export default function Dashboard() {
 
       case "line":
         if (hasComparison) {
-          const mergedData = buildComparisonData(data, compareData);
-
           return (
             <ResponsiveContainer width="100%" height={height}>
-              <LineChart data={mergedData}>
+              <LineChart data={compareData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" angle={-45} textAnchor="end" height={100} />
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="primary"
-                  name={primaryLabel || "Primário"}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={3}
-                  dot={{ fill: "hsl(var(--primary))", r: 5 }}
-                  activeDot={{ r: 8 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="compare"
-                  name={compareLabel || "Comparação"}
-                  stroke="hsl(var(--chart-2))"
-                  strokeWidth={3}
-                  dot={{ fill: "hsl(var(--chart-2))", r: 5 }}
-                  activeDot={{ r: 8 }}
-                />
+                {(crossKeys || []).map((key, index) => (
+                  <Line
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    name={key}
+                    stroke={COLORS[index % COLORS.length]}
+                    strokeWidth={3}
+                    dot={{ fill: COLORS[index % COLORS.length], r: 4 }}
+                    activeDot={{ r: 7 }}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           );
@@ -397,32 +425,25 @@ export default function Dashboard() {
 
       case "area":
         if (hasComparison) {
-          const mergedData = buildComparisonData(data, compareData);
-
           return (
             <ResponsiveContainer width="100%" height={height}>
-              <AreaChart data={mergedData}>
+              <AreaChart data={compareData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" angle={-45} textAnchor="end" height={100} />
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="primary"
-                  name={primaryLabel || "Primário"}
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
-                  fillOpacity={0.6}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="compare"
-                  name={compareLabel || "Comparação"}
-                  stroke="hsl(var(--chart-2))"
-                  fill="hsl(var(--chart-2))"
-                  fillOpacity={0.4}
-                />
+                {(crossKeys || []).map((key, index) => (
+                  <Area
+                    key={key}
+                    type="monotone"
+                    dataKey={key}
+                    name={key}
+                    stroke={COLORS[index % COLORS.length]}
+                    fill={COLORS[index % COLORS.length]}
+                    fillOpacity={0.3}
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           );
@@ -448,30 +469,24 @@ export default function Dashboard() {
 
       case "radar":
         if (hasComparison) {
-          const mergedData = buildComparisonData(data, compareData);
-
           return (
             <ResponsiveContainer width="100%" height={height}>
-              <RadarChart data={mergedData}>
+              <RadarChart data={compareData}>
                 <PolarGrid stroke="hsl(var(--border))" />
                 <PolarAngleAxis dataKey="name" className="text-xs" />
                 <PolarRadiusAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <RechartsRadar
-                  name={primaryLabel || "Primário"}
-                  dataKey="primary"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary))"
-                  fillOpacity={0.6}
-                />
-                <RechartsRadar
-                  name={compareLabel || "Comparação"}
-                  dataKey="compare"
-                  stroke="hsl(var(--chart-2))"
-                  fill="hsl(var(--chart-2))"
-                  fillOpacity={0.4}
-                />
+                {(crossKeys || []).map((key, index) => (
+                  <RechartsRadar
+                    key={key}
+                    name={key}
+                    dataKey={key}
+                    stroke={COLORS[index % COLORS.length]}
+                    fill={COLORS[index % COLORS.length]}
+                    fillOpacity={0.4}
+                  />
+                ))}
               </RadarChart>
             </ResponsiveContainer>
           );
@@ -533,18 +548,23 @@ export default function Dashboard() {
 
       case "composed":
         if (hasComparison) {
-          const mergedData = buildComparisonData(data, compareData);
-
           return (
             <ResponsiveContainer width="100%" height={height}>
-              <ComposedChart data={mergedData}>
+              <ComposedChart data={compareData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" angle={-45} textAnchor="end" height={100} />
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Bar dataKey="primary" name={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="compare" name={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                {(crossKeys || []).map((key, index) => (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    name={key}
+                    fill={COLORS[index % COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                  />
+                ))}
               </ComposedChart>
             </ResponsiveContainer>
           );
@@ -610,11 +630,12 @@ export default function Dashboard() {
 
   // Preparar dados para os gráficos
   const data1 = prepareChartData(data1Response, metric1);
-  const data1Compare = prepareChartData(data1CompareResponse, metric1Compare);
   const data2 = prepareChartData(data2Response, metric2);
-  const data2Compare = prepareChartData(data2CompareResponse, metric2Compare);
   const data3 = prepareChartData(data3Response, metric3);
-  const data3Compare = prepareChartData(data3CompareResponse, metric3Compare);
+
+  const cross1 = buildCrossDataset(data1CrossResponse, metric1, metric1Compare);
+  const cross2 = buildCrossDataset(data2CrossResponse, metric2, metric2Compare);
+  const cross3 = buildCrossDataset(data3CrossResponse, metric3, metric3Compare);
 
   return (
     <div className="space-y-6">
@@ -734,9 +755,10 @@ export default function Dashboard() {
                 chartType1,
                 data1,
                 350,
-                compareMode1 ? data1Compare : undefined,
+                compareMode1 ? cross1.data : undefined,
                 getFieldLabel(metric1),
-                compareMode1 ? getFieldLabel(metric1Compare) : undefined
+                compareMode1 ? getFieldLabel(metric1Compare) : undefined,
+                compareMode1 ? cross1.keys : undefined
               )
             ) : (
               <div className="h-[350px] flex items-center justify-center text-muted-foreground">
@@ -824,9 +846,10 @@ export default function Dashboard() {
                 chartType2,
                 data2,
                 350,
-                compareMode2 ? data2Compare : undefined,
+                compareMode2 ? cross2.data : undefined,
                 getFieldLabel(metric2),
-                compareMode2 ? getFieldLabel(metric2Compare) : undefined
+                compareMode2 ? getFieldLabel(metric2Compare) : undefined,
+                compareMode2 ? cross2.keys : undefined
               )
             ) : (
               <div className="h-[350px] flex items-center justify-center text-muted-foreground">
@@ -910,16 +933,17 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {data3.length > 0 ? (
-            renderChart(
-              chartType3,
-              data3,
-              400,
-              compareMode3 ? data3Compare : undefined,
-              getFieldLabel(metric3),
-              compareMode3 ? getFieldLabel(metric3Compare) : undefined
-            )
-          ) : (
+            {data3.length > 0 ? (
+              renderChart(
+                chartType3,
+                data3,
+                400,
+                compareMode3 ? cross3.data : undefined,
+                getFieldLabel(metric3),
+                compareMode3 ? getFieldLabel(metric3Compare) : undefined,
+                compareMode3 ? cross3.keys : undefined
+              )
+            ) : (
             <div className="h-[400px] flex items-center justify-center text-muted-foreground">
               Sem dados disponíveis
             </div>
