@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { auth } from "@/lib/firebase";
 
 // Global token storage - updated by AuthContext
 let globalIdToken: string | null = null;
@@ -6,6 +7,14 @@ let globalIdToken: string | null = null;
 export function setGlobalIdToken(token: string | null) {
   console.log("[QUERY] Setting global token:", token ? `${token.substring(0, 20)}...` : "null");
   globalIdToken = token;
+}
+
+async function refreshIdToken(): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  const token = await user.getIdToken(true);
+  setGlobalIdToken(token);
+  return token;
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -58,6 +67,37 @@ export async function apiRequest(
   });
 
   console.log(`[API REQUEST] Response status:`, res.status);
+
+  if (res.status === 401) {
+    const text = (await res.text()) || res.statusText;
+    console.warn("[API REQUEST] 401 received, attempting token refresh...");
+
+    try {
+      const refreshed = await refreshIdToken();
+      if (refreshed) {
+        const retryHeaders: HeadersInit = {
+          ...headers,
+          Authorization: `Bearer ${refreshed}`,
+        };
+
+        const retry = await fetch(url, {
+          method,
+          headers: retryHeaders,
+          body,
+          credentials: "include",
+        });
+
+        console.log(`[API REQUEST] Retry status:`, retry.status);
+        await throwIfResNotOk(retry);
+        return retry;
+      }
+    } catch (error) {
+      console.error("[API REQUEST] Token refresh failed:", error);
+    }
+
+    throw new Error(`${res.status}: ${text}`);
+  }
+
   await throwIfResNotOk(res);
   return res;
 }
@@ -75,8 +115,34 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      const text = (await res.text()) || res.statusText;
+      console.warn("[QUERY] 401 received, attempting token refresh...");
+
+      try {
+        const refreshed = await refreshIdToken();
+        if (refreshed) {
+          const retry = await fetch(queryKey.join("/") as string, {
+            headers: { ...authHeaders, Authorization: `Bearer ${refreshed}` },
+            credentials: "include",
+          });
+
+          if (unauthorizedBehavior === "returnNull" && retry.status === 401) {
+            return null;
+          }
+
+          await throwIfResNotOk(retry);
+          return await retry.json();
+        }
+      } catch (error) {
+        console.error("[QUERY] Token refresh failed:", error);
+      }
+
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+
+      throw new Error(`${res.status}: ${text}`);
     }
 
     await throwIfResNotOk(res);

@@ -57,3 +57,6 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 ### 2026-01-25 02:16
 - Revisado comparacao nos dashboards para usar interseccao entre metricas via novo endpoint /api/stats/cross (cada metrica em um eixo/serie).
 - Exportacao: filtros TEMP aplicados corretamente mesmo quando sao o unico filtro.
+
+### 2026-01-25 03:06
+- Corrigido refresh de token no client (apiRequest + queries) para evitar erro de exportacao quando o ID token expira.
