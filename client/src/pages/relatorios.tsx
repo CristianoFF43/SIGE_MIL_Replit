@@ -90,6 +90,15 @@ const AVAILABLE_COLUMNS = [
   { id: 'TEMP', label: 'TEMP' },
 ];
 
+const normalizeTempValue = (value?: string | null): string => {
+  if (!value) return "";
+  const trimmed = value.trim().toUpperCase();
+  const noDiacritics = trimmed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (noDiacritics === "NAO") return "NAO";
+  if (noDiacritics === "SIM") return "SIM";
+  return noDiacritics;
+};
+
 export default function Relatorios() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -144,6 +153,10 @@ export default function Relatorios() {
   const uniqueFuncoes = Array.from(new Set(militares.map(m => m.funcao).filter(Boolean))) as string[];
 
   // Aplica filtros localmente para preview
+  const normalizedTempFilters = filters.temp
+    .map(normalizeTempValue)
+    .filter((v) => v !== "");
+
   const filteredMilitares = militares.filter(militar => {
     if (filters.companhia.length > 0 && !filters.companhia.includes(militar.companhia)) return false;
     if (filters.posto.length > 0 && !filters.posto.includes(militar.postoGraduacao)) return false;
@@ -151,7 +164,10 @@ export default function Relatorios() {
     if (filters.missaoOp.length > 0 && militar.missaoOp && !filters.missaoOp.includes(militar.missaoOp)) return false;
     if (filters.secaoFracao.length > 0 && militar.secaoFracao && !filters.secaoFracao.includes(militar.secaoFracao)) return false;
     if (filters.funcao.length > 0 && militar.funcao && !filters.funcao.includes(militar.funcao)) return false;
-    if (filters.temp.length > 0 && (!militar.temp || !filters.temp.includes(militar.temp))) return false;
+    if (normalizedTempFilters.length > 0) {
+      const normalizedTemp = normalizeTempValue(militar.temp);
+      if (!normalizedTemp || !normalizedTempFilters.includes(normalizedTemp)) return false;
+    }
 
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();

@@ -623,6 +623,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const missaoOp = normalizeArray(req.query.missaoOp);
       const secaoFracao = normalizeArray(req.query.secaoFracao);
       const funcao = normalizeArray(req.query.funcao);
+      const temp = normalizeArray(req.query.temp);
 
       // Handle column selection
       const columns = normalizeArray(req.query.columns);
@@ -663,6 +664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           missaoOp,
           secaoFracao,
           funcao,
+          temp,
           search: search as string,
         });
         militares = await storage.getMilitaryPersonnelWithFilter(simpleTree);
@@ -752,6 +754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           missaoOp,
           secaoFracao,
           funcao,
+          temp,
           search: search as string,
         });
         militares = await storage.getMilitaryPersonnelWithFilter(simpleTree);

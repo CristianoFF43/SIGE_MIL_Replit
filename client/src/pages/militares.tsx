@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -84,6 +84,7 @@ function EditableCell({
   militarId,
   savingMilitarId,
   fieldName,
+  renderDisplay,
 }: {
   value: string | number | null | undefined;
   onSave: (newValue: string) => void;
@@ -95,6 +96,7 @@ function EditableCell({
   militarId?: number;
   savingMilitarId?: { id: number; field: string } | null;
   fieldName?: string;
+  renderDisplay?: (value: string | number | null | undefined) => ReactNode;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value?.toString() || "");
@@ -177,6 +179,10 @@ function EditableCell({
   };
 
   if (!isEditing) {
+    const displayContent = renderDisplay
+      ? renderDisplay(value)
+      : (value || <span className="text-muted-foreground italic">{placeholder || "Vazio"}</span>);
+
     return (
       <div
         onClick={() => !isSaving && setIsEditing(true)}
@@ -186,7 +192,7 @@ function EditableCell({
         {isSaving ? (
           <span className="text-muted-foreground italic">Salvando...</span>
         ) : (
-          value || <span className="text-muted-foreground italic">{placeholder || "Vazio"}</span>
+          displayContent
         )}
       </div>
     );
@@ -771,6 +777,15 @@ export default function Militares() {
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="situacao"
+                        renderDisplay={(val) =>
+                          val ? (
+                            <Badge variant={getStatusVariant(String(val))}>
+                              {String(val)}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground italic">Vazio</span>
+                          )
+                        }
                       />
                     ) : (
                       militar.situacao && (

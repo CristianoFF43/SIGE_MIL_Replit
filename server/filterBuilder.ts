@@ -20,7 +20,46 @@ const fieldMap: Record<string, any> = {
   'telefone': militaryPersonnel.telefoneContato1,
   'email': militaryPersonnel.email,
   'secaoFracao': militaryPersonnel.secaoFracao,
+  'temp': militaryPersonnel.temp,
 };
+
+function normalizeTempVariants(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  const upper = trimmed.toUpperCase();
+  const noDiacritics = upper.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (noDiacritics === "NAO") {
+    const base = ["NAO", "NÃO"];
+    const variants = new Set<string>();
+    base.forEach((v) => {
+      variants.add(v);
+      variants.add(v.toLowerCase());
+      variants.add(v.charAt(0) + v.slice(1).toLowerCase());
+    });
+    return Array.from(variants);
+  }
+
+  if (noDiacritics === "SIM") {
+    const base = ["SIM"];
+    const variants = new Set<string>();
+    base.forEach((v) => {
+      variants.add(v);
+      variants.add(v.toLowerCase());
+      variants.add(v.charAt(0) + v.slice(1).toLowerCase());
+    });
+    return Array.from(variants);
+  }
+
+  return [trimmed];
+}
+
+function expandTempValues(values: string | string[]): string[] {
+  const list = Array.isArray(values) ? values : [values];
+  const expanded = list.flatMap((val) => normalizeTempVariants(String(val)));
+  return Array.from(new Set(expanded));
+}
 
 /**
  * Builds SQL predicate for custom field filters (JSONB queries)
@@ -108,6 +147,28 @@ function buildConditionPredicate(condition: FilterCondition): SQL | undefined {
   }
 
   const { comparator, value } = condition;
+
+  if (fieldStr === "temp") {
+    const variants = Array.isArray(value)
+      ? expandTempValues(value.map((v) => String(v)))
+      : expandTempValues(String(value));
+
+    if (variants.length === 0) return undefined;
+
+    switch (comparator) {
+      case '=':
+        return variants.length > 1 ? inArray(column, variants) : eq(column, variants[0]);
+      case '!=':
+        return variants.length > 1 ? notInArray(column, variants) : ne(column, variants[0]);
+      case 'IN':
+        return inArray(column, variants);
+      case 'NOT IN':
+        return notInArray(column, variants);
+      default:
+        // For other comparators, fallback to default behavior
+        break;
+    }
+  }
 
   switch (comparator) {
     case '=':
@@ -228,6 +289,7 @@ export function simpleFiltersToTree(filters: {
   missaoOp?: string | string[];
   secaoFracao?: string | string[];
   funcao?: string | string[];
+  temp?: string | string[];
   search?: string;
 }): FilterTree {
   const conditions: FilterCondition[] = [];
@@ -260,6 +322,7 @@ export function simpleFiltersToTree(filters: {
   addCondition("missaoOp", filters.missaoOp);
   addCondition("secaoFracao", filters.secaoFracao);
   addCondition("funcao", filters.funcao);
+  addCondition("temp", filters.temp);
 
   if (filters.search) {
     // Busca textual - cria um grupo OR para buscar em múltiplos campos

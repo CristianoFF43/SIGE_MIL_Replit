@@ -250,6 +250,25 @@ export default function Dashboard() {
     return field?.label || fieldName;
   };
 
+  const buildComparisonData = (primaryData: any[], compareData: any[]) => {
+    const primaryMap = new Map(primaryData.map(item => [item.name, item.value]));
+    const compareMap = new Map(compareData.map(item => [item.name, item.value]));
+
+    const names: string[] = [];
+    primaryData.forEach(item => names.push(item.name));
+    compareData.forEach(item => {
+      if (!primaryMap.has(item.name)) {
+        names.push(item.name);
+      }
+    });
+
+    return names.map(name => ({
+      name,
+      primary: primaryMap.get(name) || 0,
+      compare: compareMap.get(name) || 0,
+    }));
+  };
+
   // Renderizar gráfico baseado no tipo selecionado
   const renderChart = (
     chartType: ChartType,
@@ -270,15 +289,7 @@ export default function Dashboard() {
     switch (chartType) {
       case "bar":
         if (hasComparison) {
-          // Merge datasets for comparison
-          const mergedData = data.map(item => {
-            const compareItem = compareData.find(c => c.name === item.name);
-            return {
-              name: item.name,
-              [primaryLabel || "Primário"]: item.value,
-              [compareLabel || "Comparação"]: compareItem?.value || 0,
-            };
-          });
+          const mergedData = buildComparisonData(data, compareData);
 
           return (
             <ResponsiveContainer width="100%" height={height}>
@@ -288,8 +299,8 @@ export default function Dashboard() {
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Bar dataKey={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-                <Bar dataKey={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="primary" name={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="compare" name={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           );
@@ -332,14 +343,7 @@ export default function Dashboard() {
 
       case "line":
         if (hasComparison) {
-          const mergedData = data.map(item => {
-            const compareItem = compareData.find(c => c.name === item.name);
-            return {
-              name: item.name,
-              [primaryLabel || "Primário"]: item.value,
-              [compareLabel || "Comparação"]: compareItem?.value || 0,
-            };
-          });
+          const mergedData = buildComparisonData(data, compareData);
 
           return (
             <ResponsiveContainer width="100%" height={height}>
@@ -351,7 +355,8 @@ export default function Dashboard() {
                 <Legend />
                 <Line
                   type="monotone"
-                  dataKey={primaryLabel || "Primário"}
+                  dataKey="primary"
+                  name={primaryLabel || "Primário"}
                   stroke="hsl(var(--primary))"
                   strokeWidth={3}
                   dot={{ fill: "hsl(var(--primary))", r: 5 }}
@@ -359,7 +364,8 @@ export default function Dashboard() {
                 />
                 <Line
                   type="monotone"
-                  dataKey={compareLabel || "Comparação"}
+                  dataKey="compare"
+                  name={compareLabel || "Comparação"}
                   stroke="hsl(var(--chart-2))"
                   strokeWidth={3}
                   dot={{ fill: "hsl(var(--chart-2))", r: 5 }}
@@ -391,14 +397,7 @@ export default function Dashboard() {
 
       case "area":
         if (hasComparison) {
-          const mergedData = data.map(item => {
-            const compareItem = compareData.find(c => c.name === item.name);
-            return {
-              name: item.name,
-              [primaryLabel || "Primário"]: item.value,
-              [compareLabel || "Comparação"]: compareItem?.value || 0,
-            };
-          });
+          const mergedData = buildComparisonData(data, compareData);
 
           return (
             <ResponsiveContainer width="100%" height={height}>
@@ -410,14 +409,16 @@ export default function Dashboard() {
                 <Legend />
                 <Area
                   type="monotone"
-                  dataKey={primaryLabel || "Primário"}
+                  dataKey="primary"
+                  name={primaryLabel || "Primário"}
                   stroke="hsl(var(--primary))"
                   fill="hsl(var(--primary))"
                   fillOpacity={0.6}
                 />
                 <Area
                   type="monotone"
-                  dataKey={compareLabel || "Comparação"}
+                  dataKey="compare"
+                  name={compareLabel || "Comparação"}
                   stroke="hsl(var(--chart-2))"
                   fill="hsl(var(--chart-2))"
                   fillOpacity={0.4}
@@ -447,14 +448,7 @@ export default function Dashboard() {
 
       case "radar":
         if (hasComparison) {
-          const mergedData = data.map(item => {
-            const compareItem = compareData.find(c => c.name === item.name);
-            return {
-              name: item.name,
-              [primaryLabel || "Primário"]: item.value,
-              [compareLabel || "Comparação"]: compareItem?.value || 0,
-            };
-          });
+          const mergedData = buildComparisonData(data, compareData);
 
           return (
             <ResponsiveContainer width="100%" height={height}>
@@ -466,14 +460,14 @@ export default function Dashboard() {
                 <Legend />
                 <RechartsRadar
                   name={primaryLabel || "Primário"}
-                  dataKey={primaryLabel || "Primário"}
+                  dataKey="primary"
                   stroke="hsl(var(--primary))"
                   fill="hsl(var(--primary))"
                   fillOpacity={0.6}
                 />
                 <RechartsRadar
                   name={compareLabel || "Comparação"}
-                  dataKey={compareLabel || "Comparação"}
+                  dataKey="compare"
                   stroke="hsl(var(--chart-2))"
                   fill="hsl(var(--chart-2))"
                   fillOpacity={0.4}
@@ -539,14 +533,7 @@ export default function Dashboard() {
 
       case "composed":
         if (hasComparison) {
-          const mergedData = data.map(item => {
-            const compareItem = compareData.find(c => c.name === item.name);
-            return {
-              name: item.name,
-              [primaryLabel || "Primário"]: item.value,
-              [compareLabel || "Comparação"]: compareItem?.value || 0,
-            };
-          });
+          const mergedData = buildComparisonData(data, compareData);
 
           return (
             <ResponsiveContainer width="100%" height={height}>
@@ -556,8 +543,8 @@ export default function Dashboard() {
                 <YAxis className="text-xs" />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend />
-                <Bar dataKey={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-                <Bar dataKey={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="primary" name={primaryLabel || "Primário"} fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="compare" name={compareLabel || "Comparação"} fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
               </ComposedChart>
             </ResponsiveContainer>
           );

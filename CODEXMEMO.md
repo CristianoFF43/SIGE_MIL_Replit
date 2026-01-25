@@ -44,3 +44,12 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 ### 2026-01-24 00:24
 - Iniciado `npm run dev` com log em `SIGE_MIL_Replit/dev-server.log`; health check OK (HTTP 200).
 - Cleanup/import inicial OK: sem duplicatas TEMP e importacao ignorada por ja existir dados.
+
+### 2026-01-24 03:40
+- Usuario promoveu conta a administrador via Supabase (SQL) e confirmou acesso ao app.
+- Pendencias mencionadas: existem bugs a corrigir, sem acoes nesta sessao.
+
+### 2026-01-25 01:11
+- Ajustado comparacao nos dashboards para unir categorias e evitar colisao de labels nos graficos.
+- Filtros TEMP: normalizacao de valores no front (relatorios) e suporte completo no backend (filterBuilder + export).
+- Efetivo Militar: situacao agora mostra badge colorido mesmo em modo edicao (mobile).
