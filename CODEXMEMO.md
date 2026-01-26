@@ -85,3 +85,6 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 ### 2026-01-26 01:26
 - Aba por companhia: correção do filtro para reagir a query string e comparar companhia com normalizacao (acentos/caixa), garantindo exibicao de dados nas abas.
 - Login: subtitulo alterado para "Sistema Integrado de Gestão do Efetivo Militar".
+
+### 2026-01-26 01:33
+- Progresso salvo a pedido do usuario. Pendencia: fazer deploy no Render e validar abas por companhia + tela de login.
