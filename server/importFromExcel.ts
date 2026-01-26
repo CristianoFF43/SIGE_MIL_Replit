@@ -50,11 +50,22 @@ interface RawMilitaryData {
   telefoneContato2?: string;
   email?: string;
   observacoes?: string;
+  temp?: string;
   customFields?: Record<string, any>; // Custom fields JSONB
 }
 
-// Mapeamento de nomes de cabeçalhos para campos padrão (case-insensitive, aceita variações)
-const FIELD_MAPPINGS: Record<string, string> = {
+const normalizeHeaderKey = (value: string) => {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+};
+
+// Mapeamento base de nomes de cabeçalhos para campos padrão (case-insensitive, aceita variações)
+const BASE_FIELD_MAPPINGS: Record<string, string> = {
   'ord': 'ord',
   'p/grad': 'postoGraduacao',
   'posto/graduacao': 'postoGraduacao',
@@ -79,6 +90,8 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'seção/fração': 'secaoFracao',
   'sec / fracao': 'secaoFracao',
   'seção / fração': 'secaoFracao',
+  'seç/fração': 'secaoFracao',
+  'seç/fracao': 'secaoFracao',
   'secao': 'secaoFracao',
   'fracao': 'secaoFracao',
   'fração': 'secaoFracao',
@@ -123,11 +136,22 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'observações': 'observacoes',
   'observacao': 'observacoes',
   'temp': 'temp',
+  'temp.': 'temp',
   'tempo': 'temp',
   'temporario': 'temp',
   'temporário': 'temp',
   't': 'temp',
 };
+
+const FIELD_MAPPINGS: Record<string, string> = {};
+for (const [key, value] of Object.entries(BASE_FIELD_MAPPINGS)) {
+  FIELD_MAPPINGS[key] = value;
+  const normalized = normalizeHeaderKey(key);
+  if (normalized) {
+    FIELD_MAPPINGS[normalized] = value;
+    FIELD_MAPPINGS[normalized.replace(/\s+/g, '')] = value;
+  }
+}
 
 // Remove espaços extras e converte para string
 const cleanStr = (val: any) => {
@@ -145,16 +169,34 @@ const cleanNum = (val: any) => {
   return isNaN(num) ? undefined : num;
 };
 
+const normalizeTempValue = (val?: string) => {
+  if (!val) return undefined;
+  const trimmed = val.trim();
+  if (!trimmed) return undefined;
+
+  const upper = trimmed.toUpperCase();
+  const noDiacritics = upper.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (noDiacritics === "SIM") return "SIM";
+  if (noDiacritics === "NAO") return "NÃO";
+
+  return trimmed;
+};
+
 // Mapeia cabeçalho para campo padrão (ou retorna null se for campo customizado)
 function mapHeaderToField(header: string): string | null {
-  const normalized = header.toLowerCase().trim();
-  return FIELD_MAPPINGS[normalized] || null;
+  const raw = header.toLowerCase().trim();
+  const normalized = normalizeHeaderKey(header);
+  const compact = normalized.replace(/\s+/g, '');
+  return FIELD_MAPPINGS[raw] || FIELD_MAPPINGS[normalized] || FIELD_MAPPINGS[compact] || null;
 }
 
 interface ColumnMapping {
   index: number;
   fieldName: string;
   isStandard: boolean; // true = campo padrão, false = campo customizado
+  headerLabel: string;
+  headerKey: string;
 }
 
 // Cria mapeamento de colunas baseado nos cabeçalhos
@@ -168,6 +210,7 @@ function createColumnMapping(headerRow: any[]): ColumnMapping[] {
     }
 
     const headerStr = header.trim();
+    const headerKey = normalizeHeaderKey(headerStr);
     const standardField = mapHeaderToField(headerStr);
 
     if (standardField) {
@@ -176,6 +219,8 @@ function createColumnMapping(headerRow: any[]): ColumnMapping[] {
         index: i,
         fieldName: standardField,
         isStandard: true,
+        headerLabel: headerStr,
+        headerKey,
       });
     } else {
       // Campo customizado (qualquer coluna não reconhecida)
@@ -183,12 +228,23 @@ function createColumnMapping(headerRow: any[]): ColumnMapping[] {
         index: i,
         fieldName: headerStr,
         isStandard: false,
+        headerLabel: headerStr,
+        headerKey,
       });
     }
   }
 
   return mapping;
 }
+
+const isHeaderLikeValue = (value: any, headerKey: string) => {
+  if (!value) return false;
+  if (!headerKey) return false;
+  const valueStr = String(value).trim();
+  if (!valueStr) return false;
+  const normalizedValue = normalizeHeaderKey(valueStr);
+  return normalizedValue === headerKey;
+};
 
 function parseRow(row: any[], columnMapping: ColumnMapping[]): RawMilitaryData | null {
   // Pula linhas vazias
@@ -203,12 +259,16 @@ function parseRow(row: any[], columnMapping: ColumnMapping[]): RawMilitaryData |
 
   // Aplica o mapeamento de colunas
   for (const mapping of columnMapping) {
-    const value = row[mapping.index];
+    const rawValue = row[mapping.index];
+    const value = isHeaderLikeValue(rawValue, mapping.headerKey) ? undefined : rawValue;
 
     if (mapping.isStandard) {
       // Campo padrão
       if (mapping.fieldName === 'ord') {
         result.ord = cleanNum(value);
+      } else if (mapping.fieldName === 'temp') {
+        const normalizedTemp = normalizeTempValue(cleanStr(value));
+        result.temp = normalizedTemp;
       } else {
         result[mapping.fieldName] = cleanStr(value);
       }

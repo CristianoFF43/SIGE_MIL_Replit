@@ -208,7 +208,7 @@ export function generatePDF(militares: MilitaryPersonnel[], customFields: Custom
   // Determine headers to use
   const headersToUse = selectedColumns && selectedColumns.length > 0
     ? selectedColumns
-    : ['ORD', 'P/GRAD', 'NOME COMPLETO', 'NOME GUERRA', 'CIA', 'SEÇ/FRAÇÃO', 'FUNÇÃO', 'SITUAÇÃO', 'MISSÃO'];
+    : ['ORD', 'P/GRAD', 'NOME COMPLETO', 'NOME GUERRA', 'CIA', 'SEÇÃO/FRAÇÃO', 'FUNÇÃO', 'SITUAÇÃO', 'MISSÃO'];
 
   // Prepara dados da tabela
   const tableData = militares.map(m => {

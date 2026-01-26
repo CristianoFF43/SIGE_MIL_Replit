@@ -179,9 +179,10 @@ function EditableCell({
   };
 
   if (!isEditing) {
+    const hasValue = value !== null && value !== undefined && String(value).trim() !== "";
     const displayContent = renderDisplay
       ? renderDisplay(value)
-      : (value || <span className="text-muted-foreground italic">{placeholder || "Vazio"}</span>);
+      : (hasValue ? value : "");
 
     return (
       <div

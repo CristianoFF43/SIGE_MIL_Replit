@@ -1,4 +1,4 @@
-# COEXMEMO
+# CODEXMEMO
 
 Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as atividades realizadas para manter continuidade.
 
@@ -70,3 +70,10 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 
 ### 2026-01-25 22:59
 - Corrigido erro de build no Render: declaracao duplicada de `temp` em `server/routes.ts` (exportacao).
+
+### 2026-01-26 00:55
+- Corrigido exportacao PDF: declarado `temp` na rota `/api/export/pdf` para evitar ReferenceError.
+- Importacao Excel: normalizacao robusta de cabecalhos (remove acentos/pontuacao), suporte a variacoes de SEÇ/FRAÇÃO e TEMP, e ignorar valores iguais ao cabecalho.
+- TEMP agora normalizado na importacao para "SIM"/"NÃO".
+- UI Efetivo: celulas vazias nao exibem mais o texto do cabecalho como placeholder.
+- Cleanup no startup: migra SEÇ/FRAÇÃO e TEMP de `custom_fields` para colunas padrao, normaliza TEMP, e remove definicoes duplicadas de campos customizados.
