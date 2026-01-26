@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -246,8 +247,13 @@ export default function Militares() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, isManager, isAdmin } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
+  const [location] = useLocation();
+  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const viewMode = searchParams.get("view");
+  const presetCompany = viewMode === "cia" ? searchParams.get("companhia") : null;
+  const isCefView = viewMode === "cef";
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterCompany, setFilterCompany] = useState<string>("all");
+  const [filterCompany, setFilterCompany] = useState<string>(() => presetCompany || "all");
   const [filterRank, setFilterRank] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
@@ -265,6 +271,14 @@ export default function Militares() {
       }, 500);
     }
   }, [isAuthenticated, authLoading, toast]);
+
+  useEffect(() => {
+    if (presetCompany) {
+      setFilterCompany(presetCompany);
+    } else if (!isCefView) {
+      setFilterCompany("all");
+    }
+  }, [presetCompany, isCefView, location]);
 
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: filterTree
@@ -375,8 +389,32 @@ export default function Militares() {
     },
   });
 
+  const normalizeKey = (val?: string | null) => {
+    if (!val) return "";
+    return val
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]/g, "");
+  };
+
+  const cefSecoes = ["1º PEF", "2º PEF", "3º PEF", "4º PEF", "5º PEF", "6º PEF"];
+  const cefSecoesKeys = new Set(cefSecoes.map((s) => normalizeKey(s)));
+
+  const matchesPreset = (militar: MilitaryPersonnel) => {
+    if (presetCompany) {
+      return normalizeKey(militar.companhia) === normalizeKey(presetCompany);
+    }
+    if (isCefView) {
+      const secaoKey = normalizeKey(militar.secaoFracao);
+      return militar.companhia === "SEDE" || militar.companhia === "CEF" || cefSecoesKeys.has(secaoKey);
+    }
+    return true;
+  };
+
   const filteredMilitares = militares
     .filter((militar) => {
+      if (!matchesPreset(militar)) return false;
       const matchesSearch =
         militar.nomeCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -480,11 +518,17 @@ export default function Militares() {
     );
   }
 
+  const heading = presetCompany
+    ? `Efetivo - ${presetCompany}`
+    : isCefView
+      ? "Efetivo - CEF"
+      : "Efetivo Total";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-primary">Efetivo Militar</h1>
+          <h1 className="text-3xl font-bold text-primary">{heading}</h1>
           <p className="text-muted-foreground">Gestão completa de militares - Edição inline estilo Excel</p>
         </div>
         {isManager && (

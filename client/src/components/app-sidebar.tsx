@@ -29,7 +29,7 @@ export function AppSidebar() {
       icon: Home,
     },
     {
-      title: "Efetivo",
+      title: "Efetivo Total",
       url: "/militares",
       icon: Users,
     },
@@ -38,12 +38,24 @@ export function AppSidebar() {
       url: "/companhias",
       icon: Building2,
     },
-    {
-      title: "Relatórios",
-      url: "/relatorios",
-      icon: BarChart3,
-    },
   ];
+
+  const companyTabs = [
+    { title: "1ª Cia", company: "1ª CIA" },
+    { title: "2ª Cia", company: "2ª CIA" },
+    { title: "3ª Cia", company: "3ª CIA" },
+    { title: "CCAp", company: "CCAP" },
+    { title: "CEF", special: "cef" },
+    { title: "B Adm", company: "B ADM" },
+  ];
+
+  const reportItem = {
+    title: "Relatórios",
+    url: "/relatorios",
+    icon: BarChart3,
+  };
+
+  const getCompanyUrl = (company: string) => `/militares?view=cia&companhia=${encodeURIComponent(company)}`;
 
   const adminItems = [
     {
@@ -88,6 +100,31 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              {companyTabs.map((item) => {
+                const url = item.special === "cef"
+                  ? "/militares?view=cef"
+                  : getCompanyUrl(item.company!);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={location === url}>
+                      <Link href={url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <Users className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+
+              <SidebarMenuItem key={reportItem.title}>
+                <SidebarMenuButton asChild isActive={location === reportItem.url}>
+                  <Link href={reportItem.url} data-testid={`link-${reportItem.title.toLowerCase()}`}>
+                    <reportItem.icon className="h-4 w-4" />
+                    <span>{reportItem.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
