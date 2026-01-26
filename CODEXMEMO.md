@@ -81,3 +81,7 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 ### 2026-01-26 01:12
 - Sidebar: renomeada aba "Efetivo" para "Efetivo Total" e adicionadas abas por companhia (1ª Cia, 2ª Cia, 3ª Cia, CCAp, CEF, B Adm) logo abaixo de Companhias.
 - Efetivo: passou a aceitar visualizacao por aba via query (`view=cia` e `view=cef`), com filtros automáticos (CEF agrega SEDE + PEFs).
+
+### 2026-01-26 01:26
+- Aba por companhia: correção do filtro para reagir a query string e comparar companhia com normalizacao (acentos/caixa), garantindo exibicao de dados nas abas.
+- Login: subtitulo alterado para "Sistema Integrado de Gestão do Efetivo Militar".
