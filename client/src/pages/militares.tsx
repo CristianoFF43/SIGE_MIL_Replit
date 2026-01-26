@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -248,7 +248,8 @@ export default function Militares() {
   const { isAuthenticated, isLoading: authLoading, isManager, isAdmin } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
   const [location] = useLocation();
-  const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const [search] = useSearch();
+  const searchParams = new URLSearchParams(search);
   const viewMode = searchParams.get("view");
   const presetCompany = viewMode === "cia" ? searchParams.get("companhia") : null;
   const isCefView = viewMode === "cef";
@@ -278,7 +279,7 @@ export default function Militares() {
     } else if (!isCefView) {
       setFilterCompany("all");
     }
-  }, [presetCompany, isCefView, location]);
+  }, [presetCompany, isCefView, search]);
 
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: filterTree
@@ -420,7 +421,7 @@ export default function Militares() {
         militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         militar.cpf?.includes(searchTerm);
 
-      const matchesCompany = filterCompany === "all" || militar.companhia === filterCompany;
+      const matchesCompany = filterCompany === "all" || normalizeKey(militar.companhia) === normalizeKey(filterCompany);
       const matchesRank = filterRank === "all" || militar.postoGraduacao === filterRank;
       const matchesStatus = filterStatus === "all" || militar.situacao === filterStatus;
 

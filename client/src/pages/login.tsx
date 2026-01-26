@@ -217,7 +217,7 @@ export default function LoginPage() {
           <div className="text-center">
             <CardTitle className="text-2xl">SIGE-MIL 7º BIS</CardTitle>
             <CardDescription>
-              Sistema de Gestão do Efetivo Militar
+              Sistema Integrado de Gestão do Efetivo Militar
             </CardDescription>
           </div>
         </CardHeader>
