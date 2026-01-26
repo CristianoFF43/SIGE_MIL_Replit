@@ -63,3 +63,10 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 
 ### 2026-01-25 03:26
 - Corrigido endpoint de exportacao PDF: faltava normalizar `temp` (ReferenceError causava 500).
+
+### 2026-01-25 03:53
+- Push de correcoes pendentes: refresh de token no client, comparacao interseccao nos dashboards, filtros TEMP e exportacao PDF.
+- Usuario solicitou pausar; retomaremos depois.
+
+### 2026-01-25 22:59
+- Corrigido erro de build no Render: declaracao duplicada de `temp` em `server/routes.ts` (exportacao).
