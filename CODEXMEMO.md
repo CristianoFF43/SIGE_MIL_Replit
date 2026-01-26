@@ -77,3 +77,7 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 - TEMP agora normalizado na importacao para "SIM"/"NÃO".
 - UI Efetivo: celulas vazias nao exibem mais o texto do cabecalho como placeholder.
 - Cleanup no startup: migra SEÇ/FRAÇÃO e TEMP de `custom_fields` para colunas padrao, normaliza TEMP, e remove definicoes duplicadas de campos customizados.
+
+### 2026-01-26 01:12
+- Sidebar: renomeada aba "Efetivo" para "Efetivo Total" e adicionadas abas por companhia (1ª Cia, 2ª Cia, 3ª Cia, CCAp, CEF, B Adm) logo abaixo de Companhias.
+- Efetivo: passou a aceitar visualizacao por aba via query (`view=cia` e `view=cef`), com filtros automáticos (CEF agrega SEDE + PEFs).
