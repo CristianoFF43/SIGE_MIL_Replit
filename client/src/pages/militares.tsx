@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Trash2, Filter, X, BookmarkPlus, Save, UserPlus, Columns } from "lucide-react";
+import { Search, Trash2, Filter, X, BookmarkPlus, Save, UserPlus, Columns } from "lucide-react";
 import { FilterBuilder } from "@/components/FilterBuilder";
 import { SavedFiltersDialog } from "@/components/SavedFiltersDialog";
 import { CustomFieldsManager } from "@/components/CustomFieldsManager";
@@ -43,7 +43,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCPF, formatPhone, getStatusVariant } from "@/lib/utils";
-import { COMPANIES, RANKS, STATUSES, MISSIONS } from "@shared/schema";
+import { COMPANIES, RANKS, STATUSES } from "@shared/schema";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
 
 // Ordenação hierárquica militar (do mais alto ao mais baixo)
@@ -247,7 +247,6 @@ export default function Militares() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, isManager, isAdmin } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
-  const [location] = useLocation();
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
   const viewMode = searchParams.get("view");
@@ -276,14 +275,59 @@ export default function Militares() {
   useEffect(() => {
     if (presetCompany) {
       setFilterCompany(presetCompany);
-    } else if (!isCefView) {
+    } else {
       setFilterCompany("all");
     }
   }, [presetCompany, isCefView, search]);
 
+  const normalizeKey = (val?: string | null) => {
+    if (!val) return "";
+    return val
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]/g, "");
+  };
+
+  const cefSecoes = ["1º PEF", "2º PEF", "3º PEF", "4º PEF", "5º PEF", "6º PEF"];
+
+  const baseFilterTree: FilterTree | null = filterTree;
+  const presetFilterTree: FilterTree | null = (() => {
+    if (presetCompany) {
+      return {
+        type: "group",
+        operator: "AND",
+        children: [
+          { type: "condition", field: "companhia", comparator: "=", value: presetCompany },
+        ],
+      };
+    }
+    if (isCefView) {
+      return {
+        type: "group",
+        operator: "OR",
+        children: [
+          { type: "condition", field: "companhia", comparator: "IN", value: ["SEDE", "CEF"] },
+          { type: "condition", field: "secaoFracao", comparator: "IN", value: cefSecoes as string[] },
+        ],
+      };
+    }
+    return null;
+  })();
+
+  const mergedFilterTree: FilterTree | null = presetFilterTree
+    ? baseFilterTree
+      ? {
+        type: "group",
+        operator: "AND",
+        children: [presetFilterTree, baseFilterTree],
+      }
+      : presetFilterTree
+    : baseFilterTree;
+
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
-    queryKey: filterTree
-      ? [`/api/militares?filter_tree=${encodeURIComponent(JSON.stringify(filterTree))}`]
+    queryKey: mergedFilterTree
+      ? [`/api/militares?filter_tree=${encodeURIComponent(JSON.stringify(mergedFilterTree))}`]
       : ["/api/militares"],
     enabled: isAuthenticated,
   });
@@ -390,32 +434,8 @@ export default function Militares() {
     },
   });
 
-  const normalizeKey = (val?: string | null) => {
-    if (!val) return "";
-    return val
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^A-Z0-9]/g, "");
-  };
-
-  const cefSecoes = ["1º PEF", "2º PEF", "3º PEF", "4º PEF", "5º PEF", "6º PEF"];
-  const cefSecoesKeys = new Set(cefSecoes.map((s) => normalizeKey(s)));
-
-  const matchesPreset = (militar: MilitaryPersonnel) => {
-    if (presetCompany) {
-      return normalizeKey(militar.companhia) === normalizeKey(presetCompany);
-    }
-    if (isCefView) {
-      const secaoKey = normalizeKey(militar.secaoFracao);
-      return militar.companhia === "SEDE" || militar.companhia === "CEF" || cefSecoesKeys.has(secaoKey);
-    }
-    return true;
-  };
-
   const filteredMilitares = militares
     .filter((militar) => {
-      if (!matchesPreset(militar)) return false;
       const matchesSearch =
         militar.nomeCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
