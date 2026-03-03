@@ -248,7 +248,7 @@ export default function Militares() {
   const { isAuthenticated, isLoading: authLoading, isManager, isAdmin } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
   const [location] = useLocation();
-  const [search] = useSearch();
+  const search = useSearch();
   const searchParams = new URLSearchParams(search);
   const viewMode = searchParams.get("view");
   const presetCompany = viewMode === "cia" ? searchParams.get("companhia") : null;

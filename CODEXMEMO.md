@@ -88,3 +88,8 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 
 ### 2026-01-26 01:33
 - Progresso salvo a pedido do usuario. Pendencia: fazer deploy no Render e validar abas por companhia + tela de login.
+
+### 2026-03-03
+- Login travava na tela inicial apos Google; ajuste no client para buscar ID token direto do Firebase quando globalIdToken nao esta definido e query de usuario roda com firebaseUser.
+- Removido db:push do npm start em producao; criado script start:with-migrate para rodar migrations quando necessario.
+- Deploy no Render exigiu manual; conexao falhava por Supabase pausado (erro "Tenant or user not found"). Reativar o projeto no Supabase resolveu o acesso.
