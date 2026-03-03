@@ -33,6 +33,15 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   if (globalIdToken) {
     console.log("[QUERY] ✅ Using token from AuthContext");
     headers["Authorization"] = `Bearer ${globalIdToken}`;
+  } else if (auth.currentUser) {
+    console.warn("[QUERY] ⚠️ No global token, reading from Firebase user...");
+    try {
+      const token = await auth.currentUser.getIdToken();
+      setGlobalIdToken(token);
+      headers["Authorization"] = `Bearer ${token}`;
+    } catch (error) {
+      console.error("[QUERY] ❌ Failed to read token from Firebase user:", error);
+    }
   } else {
     console.error("[QUERY] ❌ NO TOKEN AVAILABLE - User not authenticated!");
   }

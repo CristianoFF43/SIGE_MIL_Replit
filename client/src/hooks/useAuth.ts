@@ -8,13 +8,14 @@ export function useAuth() {
 
   const { data: user, isLoading: userDataLoading, error: queryError } = useQuery<User>({
     queryKey: ["/api/auth/user"],
-    enabled: !!firebaseUser && !!idToken,
+    enabled: !!firebaseUser,
     retry: false,
   });
 
   if (firebaseLoading) console.log("[useAuth] Firebase loading...");
   if (firebaseUser) console.log("[useAuth] Firebase User:", firebaseUser.email);
   if (idToken) console.log("[useAuth] ID Token present");
+  if (firebaseUser && !idToken) console.warn("[useAuth] Firebase user present but ID token missing");
   if (userDataLoading) console.log("[useAuth] Fetching DB user...");
   if (user) console.log("[useAuth] DB User found:", user.email);
   if (queryError) console.error("[useAuth] Query Error:", queryError);
