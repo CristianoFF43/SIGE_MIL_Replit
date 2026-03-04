@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -43,7 +43,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCPF, formatPhone, getStatusVariant } from "@/lib/utils";
-import { COMPANIES, MISSIONS, RANKS, STATUSES } from "@shared/schema";
+import { COMPANIES, RANKS, STATUSES } from "@shared/schema";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
 
 // Ordenação hierárquica militar (do mais alto ao mais baixo)
@@ -95,9 +95,6 @@ function isMilitaresQueryKey(queryKey: readonly unknown[]): boolean {
 function EditableCell({
   value,
   onSave,
-  type = "text",
-  options,
-  allowClear = false,
   className = "",
   placeholder = "",
   fieldType,
@@ -108,9 +105,6 @@ function EditableCell({
 }: {
   value: string | number | null | undefined;
   onSave: (newValue: string) => void;
-  type?: "text" | "select";
-  options?: readonly string[];
-  allowClear?: boolean;
   className?: string;
   placeholder?: string;
   fieldType?: "cpf" | "phone" | "email" | "text";
@@ -123,7 +117,6 @@ function EditableCell({
   const [editValue, setEditValue] = useState(value?.toString() || "");
   const [error, setError] = useState("");
   const { toast } = useToast();
-  const EMPTY_SELECT_VALUE = "__EMPTY__";
 
   const isSaving = savingMilitarId?.id === militarId && savingMilitarId?.field === fieldName;
 
@@ -235,38 +228,6 @@ function EditableCell({
     );
   }
 
-  if (type === "select" && options) {
-    return (
-      <Select
-        value={editValue || (allowClear ? EMPTY_SELECT_VALUE : "")}
-        onValueChange={(val) => {
-          const normalizedValue = val === EMPTY_SELECT_VALUE ? "" : val;
-          setEditValue(normalizedValue);
-          onSave(normalizedValue);
-          setIsEditing(false);
-        }}
-        open={isEditing}
-        onOpenChange={(open) => !open && setIsEditing(false)}
-      >
-        <SelectTrigger className="h-8">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {allowClear && (
-            <SelectItem value={EMPTY_SELECT_VALUE}>
-              Em branco
-            </SelectItem>
-          )}
-          {options.map((opt) => (
-            <SelectItem key={opt} value={opt}>
-              {opt}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    );
-  }
-
   return (
     <div className="space-y-1">
       <Input
@@ -306,12 +267,6 @@ export default function Militares() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [savingCell, setSavingCell] = useState<{ id: number; field: string } | null>(null);
-  const [tableScrollWidth, setTableScrollWidth] = useState(0);
-  const [showBottomScrollbar, setShowBottomScrollbar] = useState(false);
-  const tableRef = useRef<HTMLTableElement | null>(null);
-  const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const bottomScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const isSyncingScrollRef = useRef(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -396,54 +351,6 @@ export default function Militares() {
     queryKey: ["/api/custom-fields"],
     enabled: isAuthenticated,
   });
-
-  const refreshTableScrollMetrics = useCallback(() => {
-    const scrollElement = tableScrollRef.current;
-    const tableElement = tableRef.current;
-
-    if (!scrollElement || !tableElement) {
-      return;
-    }
-
-    const nextScrollWidth = Math.max(tableElement.scrollWidth, scrollElement.scrollWidth);
-    setTableScrollWidth(nextScrollWidth);
-    setShowBottomScrollbar(nextScrollWidth > scrollElement.clientWidth + 1);
-  }, []);
-
-  useEffect(() => {
-    refreshTableScrollMetrics();
-
-    const scrollElement = tableScrollRef.current;
-    const tableElement = tableRef.current;
-    if (!scrollElement || !tableElement || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => refreshTableScrollMetrics());
-    observer.observe(scrollElement);
-    observer.observe(tableElement);
-
-    return () => observer.disconnect();
-  }, [refreshTableScrollMetrics, militares.length, customFields.length]);
-
-  useEffect(() => {
-    const handleWindowResize = () => refreshTableScrollMetrics();
-    window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, [refreshTableScrollMetrics]);
-
-  const syncHorizontalScroll = useCallback((source: HTMLDivElement | null, target: HTMLDivElement | null) => {
-    if (!source || !target || isSyncingScrollRef.current) {
-      return;
-    }
-
-    isSyncingScrollRef.current = true;
-    target.scrollLeft = source.scrollLeft;
-
-    requestAnimationFrame(() => {
-      isSyncingScrollRef.current = false;
-    });
-  }, []);
 
   const updateMilitaresCaches = useCallback(
     (updater: (current: MilitaryPersonnel[]) => MilitaryPersonnel[]) => {
@@ -885,17 +792,8 @@ export default function Militares() {
         </div>
       )}
 
-      <div className="rounded-md border bg-card shadow-sm">
-        <div
-          ref={tableScrollRef}
-          className="max-h-[68vh] overflow-auto"
-          onScroll={() => syncHorizontalScroll(tableScrollRef.current, bottomScrollbarRef.current)}
-        >
-        <Table
-          ref={tableRef}
-          disableWrapper
-          className="min-w-max border-separate border-spacing-0 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap"
-        >
+      <div className="rounded-md border overflow-x-auto">
+        <Table className="min-w-max [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <TableHeader>
             <TableRow>
               <TableHead className={`${stickyHeaderClass} w-[60px]`}>Ord</TableHead>
@@ -984,8 +882,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.postoGraduacao}
                         onSave={(val) => handleCellUpdate(militar.id, "postoGraduacao", val)}
-                        type="select"
-                        options={RANKS}
+                        placeholder="P/Grad"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="postoGraduacao"
@@ -1000,8 +897,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.companhia}
                         onSave={(val) => handleCellUpdate(militar.id, "companhia", val)}
-                        type="select"
-                        options={COMPANIES}
+                        placeholder="CIA"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="companhia"
@@ -1046,9 +942,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.situacao}
                         onSave={(val) => handleCellUpdate(militar.id, "situacao", val)}
-                        type="select"
-                        options={STATUSES}
-                        allowClear
+                        placeholder="Situação"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="situacao"
@@ -1074,9 +968,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.missaoOp}
                         onSave={(val) => handleCellUpdate(militar.id, "missaoOp", val)}
-                        type="select"
-                        options={MISSIONS}
-                        allowClear
+                        placeholder="Missão/Op"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="missaoOp"
@@ -1141,9 +1033,7 @@ export default function Militares() {
                       <EditableCell
                         value={militar.temp}
                         onSave={(val) => handleCellUpdate(militar.id, "temp", val)}
-                        type="select"
-                        options={["SIM", "NÃO"]}
-                        allowClear
+                        placeholder="TEMP"
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="temp"
@@ -1164,9 +1054,6 @@ export default function Militares() {
                             value={fieldValue}
                             onSave={(val) => handleCellUpdate(militar.id, field.name, val)}
                             placeholder={field.label}
-                            type={field.fieldType === "select" ? "select" : "text"}
-                            options={field.options as string[] | undefined}
-                            allowClear={field.fieldType === "select" && field.required !== 1}
                             militarId={militar.id}
                             savingMilitarId={savingCell}
                             fieldName={field.name}
@@ -1202,21 +1089,6 @@ export default function Militares() {
             )}
           </TableBody>
         </Table>
-        </div>
-        {showBottomScrollbar && (
-          <div className="border-t bg-background/95 px-3 py-2">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Rolagem horizontal</span>
-              <div
-                ref={bottomScrollbarRef}
-                className="h-4 flex-1 overflow-x-auto overflow-y-hidden"
-                onScroll={() => syncHorizontalScroll(bottomScrollbarRef.current, tableScrollRef.current)}
-              >
-                <div style={{ width: tableScrollWidth, height: 1 }} />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
