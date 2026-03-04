@@ -447,14 +447,14 @@ export function UserDialog({
                         </PopoverTrigger>
                         <PopoverContent className="w-[520px] p-0" align="start">
                           <Command>
-                            <CommandInput placeholder="Buscar por nome, posto, companhia ou secao..." />
+                            <CommandInput placeholder="Buscar por Nome de Guerra..." />
                             <CommandList>
                               <CommandEmpty>Nenhum militar disponivel.</CommandEmpty>
                               <CommandGroup className="max-h-72 overflow-auto">
                                 {visibleMilitaryOptions.map((military) => (
                                   <CommandItem
                                     key={military.id}
-                                    value={`${military.postoGraduacao} ${military.nomeCompleto} ${military.companhia} ${military.secaoFracao || ""}`}
+                                    value={(military.nomeGuerra || "").trim()}
                                     onSelect={() => {
                                       handleLinkedMilitaryChange(military.id);
                                       setMilitaryPickerOpen(false);
