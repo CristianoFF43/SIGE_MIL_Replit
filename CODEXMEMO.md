@@ -93,3 +93,10 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 - Login travava na tela inicial apos Google; ajuste no client para buscar ID token direto do Firebase quando globalIdToken nao esta definido e query de usuario roda com firebaseUser.
 - Removido db:push do npm start em producao; criado script start:with-migrate para rodar migrations quando necessario.
 - Deploy no Render exigiu manual; conexao falhava por Supabase pausado (erro "Tenant or user not found"). Reativar o projeto no Supabase resolveu o acesso.
+### 2026-03-03 23:25
+- Abas por companhia passaram a filtrar no backend via filter_tree, evitando carregar o efetivo total quando a visualizacao eh 1a/2a/3a Cia, CCAp, CEF ou B Adm.
+- Implementado vinculo seguro usuario <-> militar no modulo de Administracao, com sincronizacao automatica de CIA e SEC/FRACAO a partir do militar vinculado.
+- Regra de permissao global elevada passou a depender do militar vinculado pertencer ao S1; o Admin local ficou restrito ao escopo da propria companhia.
+- Tabela "Efetivo Total" foi auditada: correcoes de refresh apos edicao, normalizacao de valores vazios (nao exibir "Vazio" nem "-"), manutencao do cabecalho fixo e retorno da edicao inline por texto em todas as celulas.
+- Implementada sincronizacao automatica dos dados de militares entre "Efetivo Total", abas das Cias, Companhias, Relatorios e importacoes do Admin, com invalidacao global de queries e notificacao entre abas do navegador.
+- Busca de "Militar Vinculado" no seletor de Administracao passou a considerar apenas o campo "Nome de Guerra".
