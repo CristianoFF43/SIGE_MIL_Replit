@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -43,7 +43,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCPF, formatPhone, getStatusVariant } from "@/lib/utils";
-import { COMPANIES, RANKS, STATUSES } from "@shared/schema";
+import { COMPANIES, MISSIONS, RANKS, STATUSES } from "@shared/schema";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
 
 // Ordenação hierárquica militar (do mais alto ao mais baixo)
@@ -73,12 +73,31 @@ function getRankOrder(rank: string): number {
   return index === -1 ? 999 : index; // Postos não reconhecidos vão para o final
 }
 
+const MILITARES_QUERY_PREFIX = "/api/militares";
+
+function isBlankValue(value: string | number | null | undefined): boolean {
+  return value === null || value === undefined || String(value).trim() === "";
+}
+
+function renderPlainValue(value: string | number | null | undefined): ReactNode {
+  if (isBlankValue(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function isMilitaresQueryKey(queryKey: readonly unknown[]): boolean {
+  return typeof queryKey[0] === "string" && queryKey[0].startsWith(MILITARES_QUERY_PREFIX);
+}
+
 // Componente de célula editável
 function EditableCell({
   value,
   onSave,
   type = "text",
   options,
+  allowClear = false,
   className = "",
   placeholder = "",
   fieldType,
@@ -91,6 +110,7 @@ function EditableCell({
   onSave: (newValue: string) => void;
   type?: "text" | "select";
   options?: readonly string[];
+  allowClear?: boolean;
   className?: string;
   placeholder?: string;
   fieldType?: "cpf" | "phone" | "email" | "text";
@@ -103,11 +123,19 @@ function EditableCell({
   const [editValue, setEditValue] = useState(value?.toString() || "");
   const [error, setError] = useState("");
   const { toast } = useToast();
+  const EMPTY_SELECT_VALUE = "__EMPTY__";
 
   const isSaving = savingMilitarId?.id === militarId && savingMilitarId?.field === fieldName;
 
-  const validateField = (val: string): boolean => {
-    if (!val || val.trim() === "") return true; // Empty is ok for optional fields
+  useEffect(() => {
+    if (!isEditing) {
+      setEditValue(value?.toString() || "");
+      setError("");
+    }
+  }, [isEditing, value]);
+
+  const validateField = (val: string): string | null => {
+    if (!val || val.trim() === "") return null; // Empty is ok for optional fields
 
     switch (fieldType) {
       case "cpf":
@@ -115,12 +143,10 @@ function EditableCell({
         const cpfCleaned = val.replace(/[\.\-\s]/g, "");
         // Verifica se contém apenas dígitos
         if (!/^[0-9]+$/.test(cpfCleaned)) {
-          setError("CPF deve conter apenas números");
-          return false;
+          return "CPF deve conter apenas números";
         }
         if (cpfCleaned.length !== 11) {
-          setError("CPF deve ter exatamente 11 dígitos");
-          return false;
+          return "CPF deve ter exatamente 11 dígitos";
         }
         break;
       case "phone":
@@ -129,41 +155,41 @@ function EditableCell({
         // Verifica se contém apenas dígitos (e possivelmente + no início)
         const phoneOnlyDigits = phoneCleaned.replace(/^\+/, ""); // Remove + opcional
         if (!/^[0-9]+$/.test(phoneOnlyDigits)) {
-          setError("Telefone deve conter apenas números");
-          return false;
+          return "Telefone deve conter apenas números";
         }
         if (phoneOnlyDigits.length < 10 || phoneOnlyDigits.length > 11) {
-          setError("Telefone deve ter 10 ou 11 dígitos");
-          return false;
+          return "Telefone deve ter 10 ou 11 dígitos";
         }
         break;
       case "email":
         if (!val.includes("@") || !val.includes(".")) {
-          setError("Email inválido (deve conter @ e domínio)");
-          return false;
+          return "Email inválido (deve conter @ e domínio)";
         }
         const emailParts = val.split("@");
         if (emailParts.length !== 2 || emailParts[0].length === 0 || emailParts[1].length < 3) {
-          setError("Email inválido");
-          return false;
+          return "Email inválido";
         }
         break;
     }
-    setError("");
-    return true;
+    return null;
   };
 
   const handleSave = () => {
-    if (editValue !== value?.toString()) {
-      if (!validateField(editValue)) {
+    const normalizedEditValue = editValue.trim();
+    const normalizedCurrentValue = value?.toString().trim() || "";
+
+    if (normalizedEditValue !== normalizedCurrentValue) {
+      const validationError = validateField(normalizedEditValue);
+      if (validationError) {
+        setError(validationError);
         toast({
           title: "Erro de validação",
-          description: error,
+          description: validationError,
           variant: "destructive",
         });
         return;
       }
-      onSave(editValue);
+      onSave(normalizedEditValue);
     }
     setIsEditing(false);
     setError("");
@@ -181,15 +207,24 @@ function EditableCell({
 
   if (!isEditing) {
     const hasValue = value !== null && value !== undefined && String(value).trim() !== "";
-    const displayContent = renderDisplay
-      ? renderDisplay(value)
-      : (hasValue ? value : "");
+    const displayContent = hasValue
+      ? (renderDisplay ? renderDisplay(value) : value)
+      : null;
 
     return (
       <div
         onClick={() => !isSaving && setIsEditing(true)}
-        className={`cursor-pointer hover-elevate rounded px-2 py-1 min-h-[2rem] flex items-center ${isSaving ? "opacity-50 cursor-wait" : ""} ${className}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            if (!isSaving) {
+              setIsEditing(true);
+            }
+          }
+        }}
+        className={`cursor-pointer hover-elevate rounded px-2 py-1 min-h-[2rem] flex items-center outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${isSaving ? "opacity-50 cursor-wait" : ""} ${className}`}
         title={isSaving ? "Salvando..." : "Clique para editar"}
+        tabIndex={0}
       >
         {isSaving ? (
           <span className="text-muted-foreground italic">Salvando...</span>
@@ -203,10 +238,11 @@ function EditableCell({
   if (type === "select" && options) {
     return (
       <Select
-        value={editValue}
+        value={editValue || (allowClear ? EMPTY_SELECT_VALUE : "")}
         onValueChange={(val) => {
-          setEditValue(val);
-          onSave(val);
+          const normalizedValue = val === EMPTY_SELECT_VALUE ? "" : val;
+          setEditValue(normalizedValue);
+          onSave(normalizedValue);
           setIsEditing(false);
         }}
         open={isEditing}
@@ -216,6 +252,11 @@ function EditableCell({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {allowClear && (
+            <SelectItem value={EMPTY_SELECT_VALUE}>
+              Em branco
+            </SelectItem>
+          )}
           {options.map((opt) => (
             <SelectItem key={opt} value={opt}>
               {opt}
@@ -265,6 +306,12 @@ export default function Militares() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   const [savingCell, setSavingCell] = useState<{ id: number; field: string } | null>(null);
+  const [tableScrollWidth, setTableScrollWidth] = useState(0);
+  const [showBottomScrollbar, setShowBottomScrollbar] = useState(false);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomScrollbarRef = useRef<HTMLDivElement | null>(null);
+  const isSyncingScrollRef = useRef(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -332,10 +379,16 @@ export default function Militares() {
       : presetFilterTree
     : baseFilterTree;
 
+  const militaresQueryUrl = useMemo(
+    () =>
+      mergedFilterTree
+        ? `${MILITARES_QUERY_PREFIX}?filter_tree=${encodeURIComponent(JSON.stringify(mergedFilterTree))}`
+        : MILITARES_QUERY_PREFIX,
+    [mergedFilterTree],
+  );
+
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
-    queryKey: mergedFilterTree
-      ? [`/api/militares?filter_tree=${encodeURIComponent(JSON.stringify(mergedFilterTree))}`]
-      : ["/api/militares"],
+    queryKey: [militaresQueryUrl],
     enabled: isAuthenticated,
   });
 
@@ -344,20 +397,119 @@ export default function Militares() {
     enabled: isAuthenticated,
   });
 
+  const refreshTableScrollMetrics = useCallback(() => {
+    const scrollElement = tableScrollRef.current;
+    const tableElement = tableRef.current;
+
+    if (!scrollElement || !tableElement) {
+      return;
+    }
+
+    const nextScrollWidth = Math.max(tableElement.scrollWidth, scrollElement.scrollWidth);
+    setTableScrollWidth(nextScrollWidth);
+    setShowBottomScrollbar(nextScrollWidth > scrollElement.clientWidth + 1);
+  }, []);
+
+  useEffect(() => {
+    refreshTableScrollMetrics();
+
+    const scrollElement = tableScrollRef.current;
+    const tableElement = tableRef.current;
+    if (!scrollElement || !tableElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => refreshTableScrollMetrics());
+    observer.observe(scrollElement);
+    observer.observe(tableElement);
+
+    return () => observer.disconnect();
+  }, [refreshTableScrollMetrics, militares.length, customFields.length]);
+
+  useEffect(() => {
+    const handleWindowResize = () => refreshTableScrollMetrics();
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [refreshTableScrollMetrics]);
+
+  const syncHorizontalScroll = useCallback((source: HTMLDivElement | null, target: HTMLDivElement | null) => {
+    if (!source || !target || isSyncingScrollRef.current) {
+      return;
+    }
+
+    isSyncingScrollRef.current = true;
+    target.scrollLeft = source.scrollLeft;
+
+    requestAnimationFrame(() => {
+      isSyncingScrollRef.current = false;
+    });
+  }, []);
+
+  const updateMilitaresCaches = useCallback(
+    (updater: (current: MilitaryPersonnel[]) => MilitaryPersonnel[]) => {
+      queryClient.setQueriesData<MilitaryPersonnel[]>(
+        {
+          predicate: (query) => isMilitaresQueryKey(query.queryKey),
+        },
+        (current) => (current ? updater(current) : current),
+      );
+    },
+    [],
+  );
+
+  const invalidateMilitaresQueries = useCallback(() => {
+    queryClient.invalidateQueries({
+      predicate: (query) => isMilitaresQueryKey(query.queryKey),
+    });
+  }, []);
+
   // Mutation para atualizar militar
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: Partial<MilitaryPersonnel> }) => {
-      await apiRequest("PATCH", `/api/militares/${id}`, data);
+      const response = await apiRequest("PATCH", `/api/militares/${id}`, data);
+      return await response.json() as MilitaryPersonnel;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({
+        predicate: (query) => isMilitaresQueryKey(query.queryKey),
+      });
+
+      const previousQueries = queryClient.getQueriesData<MilitaryPersonnel[]>({
+        predicate: (query) => isMilitaresQueryKey(query.queryKey),
+      });
+
+      updateMilitaresCaches((current) =>
+        current.map((militar) =>
+          militar.id === id
+            ? ({
+                ...militar,
+                ...data,
+              } as MilitaryPersonnel)
+            : militar,
+        ),
+      );
+
+      return { previousQueries };
+    },
+    onSuccess: (updatedMilitar) => {
+      updateMilitaresCaches((current) =>
+        current.map((militar) => (militar.id === updatedMilitar.id ? updatedMilitar : militar)),
+      );
+      invalidateMilitaresQueries();
       setSavingCell(null);
       toast({
         title: "Sucesso",
         description: "Dados atualizados",
       });
     },
-    onError: (error: Error) => {
+    onError: (
+      error: Error,
+      _variables,
+      context?: { previousQueries: Array<[readonly unknown[], MilitaryPersonnel[] | undefined]> },
+    ) => {
+      context?.previousQueries.forEach(([queryKey, previousData]) => {
+        queryClient.setQueryData(queryKey, previousData);
+      });
       setSavingCell(null);
       if (isUnauthorizedError(error)) {
         toast({
@@ -384,7 +536,7 @@ export default function Militares() {
       return await apiRequest("POST", "/api/militares", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+      invalidateMilitaresQueries();
       toast({
         title: "Sucesso",
         description: "Militar adicionado com sucesso",
@@ -415,7 +567,7 @@ export default function Militares() {
       await apiRequest("DELETE", `/api/militares/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+      invalidateMilitaresQueries();
       toast({
         title: "Sucesso",
         description: "Militar removido com sucesso",
@@ -441,30 +593,31 @@ export default function Militares() {
     },
   });
 
-  const filteredMilitares = militares
-    .filter((militar) => {
-      const matchesSearch =
-        militar.nomeCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        militar.cpf?.includes(searchTerm);
+  const filteredMilitares = useMemo(
+    () =>
+      [...militares]
+        .filter((militar) => {
+          const matchesSearch =
+            militar.nomeCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            militar.cpf?.includes(searchTerm);
 
-      const matchesCompany = filterCompany === "all" || normalizeKey(militar.companhia) === normalizeKey(filterCompany);
-      const matchesRank = filterRank === "all" || militar.postoGraduacao === filterRank;
-      const matchesStatus = filterStatus === "all" || militar.situacao === filterStatus;
+          const matchesCompany = filterCompany === "all" || normalizeKey(militar.companhia) === normalizeKey(filterCompany);
+          const matchesRank = filterRank === "all" || militar.postoGraduacao === filterRank;
+          const matchesStatus = filterStatus === "all" || militar.situacao === filterStatus;
 
-      return matchesSearch && matchesCompany && matchesRank && matchesStatus;
-    })
-    .sort((a, b) => {
-      // Ordenar por hierarquia militar (posto/graduação)
-      const rankDiff = getRankOrder(a.postoGraduacao) - getRankOrder(b.postoGraduacao);
-      if (rankDiff !== 0) return rankDiff;
+          return matchesSearch && matchesCompany && matchesRank && matchesStatus;
+        })
+        .sort((a, b) => {
+          const rankDiff = getRankOrder(a.postoGraduacao) - getRankOrder(b.postoGraduacao);
+          if (rankDiff !== 0) return rankDiff;
 
-      // Se mesmo posto, ordenar por ord (número de ordem)
-      if (a.ord && b.ord) return a.ord - b.ord;
+          if (a.ord && b.ord) return a.ord - b.ord;
 
-      // Se não houver ord, ordenar por nome
-      return (a.nomeCompleto || "").localeCompare(b.nomeCompleto || "");
-    });
+          return (a.nomeCompleto || "").localeCompare(b.nomeCompleto || "");
+        }),
+    [militares, searchTerm, filterCompany, filterRank, filterStatus],
+  );
 
   const defaultCreateCompany =
     presetCompany ||
@@ -478,13 +631,14 @@ export default function Militares() {
 
   const handleCellUpdate = (id: number, field: keyof MilitaryPersonnel | string, value: string) => {
     setSavingCell({ id, field: field as string });
+    const normalizedValue = value.trim();
 
     // Check if it's a custom field
     const customField = customFields.find(cf => cf.name === field);
 
     if (customField) {
       // Validate required fields on frontend (quick feedback)
-      if (customField.required === 1 && (!value || value.trim() === '')) {
+      if (customField.required === 1 && normalizedValue === '') {
         toast({
           title: "Campo obrigatório",
           description: `${customField.label} não pode ser vazio`,
@@ -495,8 +649,8 @@ export default function Militares() {
       }
 
       // Type-specific validation
-      if (customField.fieldType === 'number' && value && value.trim() !== '') {
-        const numValue = parseFloat(value);
+      if (customField.fieldType === 'number' && normalizedValue !== '') {
+        const numValue = parseFloat(normalizedValue);
         if (isNaN(numValue)) {
           toast({
             title: "Valor inválido",
@@ -508,8 +662,8 @@ export default function Militares() {
         }
       }
 
-      if (customField.fieldType === 'select' && value && customField.options) {
-        if (!customField.options.includes(value)) {
+      if (customField.fieldType === 'select' && normalizedValue !== '' && customField.options) {
+        if (!customField.options.includes(normalizedValue)) {
           toast({
             title: "Valor inválido",
             description: `${customField.label}: valor não está entre as opções válidas`,
@@ -525,14 +679,27 @@ export default function Militares() {
       const currentCustomFields = (militar?.customFields as Record<string, any>) || {};
       const updatedCustomFields = {
         ...currentCustomFields,
-        [field]: value || null,
+        [field]: normalizedValue || null,
       };
       updateMutation.mutate({ id, data: { customFields: updatedCustomFields } });
     } else {
       // Standard field update
-      let finalValue: any = value || null;
+      let finalValue: any = normalizedValue || null;
       if (field === 'ord') {
-        finalValue = value && value.trim() !== '' ? parseInt(value, 10) : null;
+        if (normalizedValue === '') {
+          finalValue = null;
+        } else {
+          finalValue = parseInt(normalizedValue, 10);
+          if (Number.isNaN(finalValue)) {
+            toast({
+              title: "Valor inválido",
+              description: "Ord deve ser um número inteiro válido",
+              variant: "destructive",
+            });
+            setSavingCell(null);
+            return;
+          }
+        }
       }
       updateMutation.mutate({ id, data: { [field]: finalValue } });
     }
@@ -570,6 +737,7 @@ export default function Militares() {
     : isCefView
       ? "Efetivo - CEF"
       : "Efetivo Total";
+  const stickyHeaderClass = "sticky top-0 z-20 bg-background/95 shadow-[inset_0_-1px_0_hsl(var(--border))] backdrop-blur supports-[backdrop-filter]:bg-background/90";
 
   return (
     <div className="space-y-6">
@@ -717,35 +885,44 @@ export default function Militares() {
         </div>
       )}
 
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
+      <div className="rounded-md border bg-card shadow-sm">
+        <div
+          ref={tableScrollRef}
+          className="max-h-[68vh] overflow-auto"
+          onScroll={() => syncHorizontalScroll(tableScrollRef.current, bottomScrollbarRef.current)}
+        >
+        <Table
+          ref={tableRef}
+          disableWrapper
+          className="min-w-max border-separate border-spacing-0 [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap"
+        >
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[60px]">Ord</TableHead>
-              <TableHead className="min-w-[200px]">Nome Completo</TableHead>
-              <TableHead className="min-w-[150px]">Nome de Guerra</TableHead>
-              <TableHead className="min-w-[120px]">P/Grad</TableHead>
-              <TableHead className="min-w-[100px]">CIA</TableHead>
-              <TableHead className="min-w-[150px]">SEÇ/FRAÇÃO</TableHead>
-              <TableHead className="min-w-[150px]">Função</TableHead>
-              <TableHead className="min-w-[120px]">Situação</TableHead>
-              <TableHead className="min-w-[120px]">Missão</TableHead>
-              <TableHead className="min-w-[130px]">CPF</TableHead>
-              <TableHead className="min-w-[130px]">Telefone</TableHead>
-              <TableHead className="min-w-[200px]">Email</TableHead>
-              <TableHead className="min-w-[100px]">TEMP</TableHead>
+              <TableHead className={`${stickyHeaderClass} w-[60px]`}>Ord</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[200px]`}>Nome Completo</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[150px]`}>Nome de Guerra</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[120px]`}>P/Grad</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[100px]`}>CIA</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[150px]`}>SEÇ/FRAÇÃO</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[150px]`}>Função</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[120px]`}>Situação</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[120px]`}>Missão</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[130px]`}>CPF</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[130px]`}>Telefone</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[200px]`}>Email</TableHead>
+              <TableHead className={`${stickyHeaderClass} min-w-[100px]`}>TEMP</TableHead>
               {customFields.map((field) => (
-                <TableHead key={field.id} className="min-w-[150px]">
+                <TableHead key={field.id} className={`${stickyHeaderClass} min-w-[150px]`}>
                   {field.label}
                 </TableHead>
               ))}
-              {canDeleteVisibleRows && <TableHead className="w-[80px]">Ações</TableHead>}
+              {canDeleteVisibleRows && <TableHead className={`${stickyHeaderClass} w-[80px]`}>Ações</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredMilitares.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canDeleteVisibleRows ? 13 + customFields.length : 12 + customFields.length} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={13 + customFields.length + (canDeleteVisibleRows ? 1 : 0)} className="text-center py-8 text-muted-foreground">
                   Nenhum militar encontrado
                 </TableCell>
               </TableRow>
@@ -798,7 +975,7 @@ export default function Militares() {
                         fieldName="nomeGuerra"
                       />
                     ) : (
-                      militar.nomeGuerra || "-"
+                      renderPlainValue(militar.nomeGuerra)
                     )}
                   </TableCell>
 
@@ -823,7 +1000,8 @@ export default function Militares() {
                       <EditableCell
                         value={militar.companhia}
                         onSave={(val) => handleCellUpdate(militar.id, "companhia", val)}
-                        placeholder="CIA"
+                        type="select"
+                        options={COMPANIES}
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="companhia"
@@ -844,7 +1022,7 @@ export default function Militares() {
                         fieldName="secaoFracao"
                       />
                     ) : (
-                      militar.secaoFracao || "-"
+                      renderPlainValue(militar.secaoFracao)
                     )}
                   </TableCell>
 
@@ -859,7 +1037,7 @@ export default function Militares() {
                         fieldName="funcao"
                       />
                     ) : (
-                      militar.funcao || "-"
+                      renderPlainValue(militar.funcao)
                     )}
                   </TableCell>
 
@@ -868,7 +1046,9 @@ export default function Militares() {
                       <EditableCell
                         value={militar.situacao}
                         onSave={(val) => handleCellUpdate(militar.id, "situacao", val)}
-                        placeholder="Situação"
+                        type="select"
+                        options={STATUSES}
+                        allowClear
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="situacao"
@@ -877,9 +1057,7 @@ export default function Militares() {
                             <Badge variant={getStatusVariant(String(val))}>
                               {String(val)}
                             </Badge>
-                          ) : (
-                            <span className="text-muted-foreground italic">Vazio</span>
-                          )
+                          ) : null
                         }
                       />
                     ) : (
@@ -896,13 +1074,15 @@ export default function Militares() {
                       <EditableCell
                         value={militar.missaoOp}
                         onSave={(val) => handleCellUpdate(militar.id, "missaoOp", val)}
-                        placeholder="Missão/Op"
+                        type="select"
+                        options={MISSIONS}
+                        allowClear
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="missaoOp"
                       />
                     ) : (
-                      militar.missaoOp || "-"
+                      renderPlainValue(militar.missaoOp)
                     )}
                   </TableCell>
 
@@ -952,7 +1132,7 @@ export default function Militares() {
                         fieldName="email"
                       />
                     ) : (
-                      militar.email || "-"
+                      renderPlainValue(militar.email)
                     )}
                   </TableCell>
 
@@ -963,12 +1143,13 @@ export default function Militares() {
                         onSave={(val) => handleCellUpdate(militar.id, "temp", val)}
                         type="select"
                         options={["SIM", "NÃO"]}
+                        allowClear
                         militarId={militar.id}
                         savingMilitarId={savingCell}
                         fieldName="temp"
                       />
                     ) : (
-                      militar.temp || "-"
+                      renderPlainValue(militar.temp)
                     )}
                   </TableCell>
 
@@ -985,12 +1166,13 @@ export default function Militares() {
                             placeholder={field.label}
                             type={field.fieldType === "select" ? "select" : "text"}
                             options={field.options as string[] | undefined}
+                            allowClear={field.fieldType === "select" && field.required !== 1}
                             militarId={militar.id}
                             savingMilitarId={savingCell}
                             fieldName={field.name}
                           />
                         ) : (
-                          fieldValue || "-"
+                          renderPlainValue(fieldValue)
                         )}
                       </TableCell>
                     );
@@ -1020,6 +1202,21 @@ export default function Militares() {
             )}
           </TableBody>
         </Table>
+        </div>
+        {showBottomScrollbar && (
+          <div className="border-t bg-background/95 px-3 py-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Rolagem horizontal</span>
+              <div
+                ref={bottomScrollbarRef}
+                className="h-4 flex-1 overflow-x-auto overflow-y-hidden"
+                onScroll={() => syncHorizontalScroll(bottomScrollbarRef.current, tableScrollRef.current)}
+              >
+                <div style={{ width: tableScrollWidth, height: 1 }} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
