@@ -20,7 +20,7 @@ import logoUrl from "@assets/LOGO 7º BIS_1761200936316.png";
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, isAdmin, isManager } = useAuth();
+  const { user, isAdmin, isManager, roleLabel } = useAuth();
 
   const mainItems = [
     {
@@ -65,10 +65,10 @@ export function AppSidebar() {
     },
   ];
 
-  const getRoleBadge = (role: string | undefined) => {
-    if (role === "administrator") return <Badge variant="default" className="text-xs">Admin</Badge>;
-    if (role === "manager") return <Badge variant="secondary" className="text-xs">Gerente</Badge>;
-    return <Badge variant="outline" className="text-xs">Usuário</Badge>;
+  const getRoleBadge = () => {
+    if (roleLabel.includes("Administrador")) return <Badge variant="default" className="text-xs">{roleLabel}</Badge>;
+    if (roleLabel.includes("Gerente")) return <Badge variant="secondary" className="text-xs">{roleLabel}</Badge>;
+    return <Badge variant="outline" className="text-xs">{roleLabel}</Badge>;
   };
 
   return (
@@ -163,7 +163,7 @@ export function AppSidebar() {
               {user?.firstName} {user?.lastName}
             </p>
             <div className="flex items-center gap-2">
-              {getRoleBadge(user?.role)}
+              {getRoleBadge()}
             </div>
           </div>
         </div>

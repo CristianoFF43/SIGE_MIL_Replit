@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,8 +25,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { RANKS, DEFAULT_PERMISSIONS, type Permission, type User } from "@shared/schema";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { RANKS, DEFAULT_PERMISSIONS, type AccessMeta, type MilitaryPersonnel, type Permission, type User } from "@shared/schema";
+import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
 
 const userFormSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -45,6 +56,10 @@ interface UserDialogProps {
   user?: User | null;
   onSubmit: (data: UserFormValues & { permissions: Permission }) => Promise<void>;
   isPending?: boolean;
+  canManageGlobalScope?: boolean;
+  forcedCompany?: string | null;
+  militaryOptions?: MilitaryPersonnel[];
+  existingUsers?: User[];
 }
 
 export function UserDialog({
@@ -53,9 +68,25 @@ export function UserDialog({
   user,
   onSubmit,
   isPending = false,
+  canManageGlobalScope = false,
+  forcedCompany = null,
+  militaryOptions = [],
+  existingUsers = [],
 }: UserDialogProps) {
   const [useCustomPermissions, setUseCustomPermissions] = useState(false);
+  const [militaryPickerOpen, setMilitaryPickerOpen] = useState(false);
   const [permissions, setPermissions] = useState<Permission>(DEFAULT_PERMISSIONS.user);
+  const [accessMeta, setAccessMeta] = useState<AccessMeta>({
+    assignedCompany: null,
+    assignedSection: null,
+    localRole: null,
+    linkedMilitaryId: null,
+    linkedMilitaryCpf: null,
+    linkedMilitaryIdentity: null,
+    linkedMilitaryEmail: null,
+    linkedMilitaryName: null,
+    linkedMilitaryRank: null,
+  });
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -70,10 +101,40 @@ export function UserDialog({
   });
 
   const selectedRole = form.watch("role");
+  const selectedMilitary = useMemo(
+    () => militaryOptions.find((military) => military.id === accessMeta.linkedMilitaryId) || null,
+    [militaryOptions, accessMeta.linkedMilitaryId],
+  );
+
+  const visibleMilitaryOptions = useMemo(() => {
+    return militaryOptions
+      .filter((military) => !forcedCompany || military.companhia === forcedCompany)
+      .filter((military) => {
+        return !existingUsers.some((existingUser) => {
+          if (existingUser.id === user?.id) {
+            return false;
+          }
+
+          const existingMeta = getAccessMeta(existingUser.permissions as Permission | null | undefined);
+          return existingMeta.linkedMilitaryId === military.id;
+        });
+      })
+      .sort((left, right) => {
+        if (left.companhia !== right.companhia) {
+          return left.companhia.localeCompare(right.companhia, "pt-BR");
+        }
+        return left.nomeCompleto.localeCompare(right.nomeCompleto, "pt-BR");
+      });
+  }, [existingUsers, forcedCompany, militaryOptions, user?.id]);
+
+  const derivedCompany = selectedMilitary?.companhia || accessMeta.assignedCompany || null;
+  const derivedSection = selectedMilitary?.secaoFracao || accessMeta.assignedSection || null;
+  const linkIsLegacy = !accessMeta.linkedMilitaryId && (!!accessMeta.assignedCompany || !!accessMeta.assignedSection);
 
   // Update form when user prop changes
   useEffect(() => {
     if (user) {
+      const meta = getAccessMeta(user.permissions as Permission | null | undefined);
       form.reset({
         email: user.email || "",
         firstName: user.firstName || "",
@@ -86,11 +147,22 @@ export function UserDialog({
       // Load user's custom permissions or default
       if (user.permissions) {
         setPermissions(user.permissions as Permission);
-        setUseCustomPermissions(true);
+        setUseCustomPermissions(canManageGlobalScope);
       } else {
         setPermissions(DEFAULT_PERMISSIONS[user.role] || DEFAULT_PERMISSIONS.user);
         setUseCustomPermissions(false);
       }
+      setAccessMeta({
+        assignedCompany: meta.assignedCompany || forcedCompany || null,
+        assignedSection: meta.assignedSection || null,
+        localRole: meta.localRole || (meta.assignedCompany ? "user" : null),
+        linkedMilitaryId: meta.linkedMilitaryId || null,
+        linkedMilitaryCpf: meta.linkedMilitaryCpf || null,
+        linkedMilitaryIdentity: meta.linkedMilitaryIdentity || null,
+        linkedMilitaryEmail: meta.linkedMilitaryEmail || null,
+        linkedMilitaryName: meta.linkedMilitaryName || null,
+        linkedMilitaryRank: meta.linkedMilitaryRank || null,
+      });
     } else {
       form.reset({
         email: "",
@@ -102,20 +174,44 @@ export function UserDialog({
       });
       setPermissions(DEFAULT_PERMISSIONS.user);
       setUseCustomPermissions(false);
+      setAccessMeta({
+        assignedCompany: null,
+        assignedSection: null,
+        localRole: null,
+        linkedMilitaryId: null,
+        linkedMilitaryCpf: null,
+        linkedMilitaryIdentity: null,
+        linkedMilitaryEmail: null,
+        linkedMilitaryName: null,
+        linkedMilitaryRank: null,
+      });
     }
-  }, [user, form]);
+  }, [user, form, canManageGlobalScope, forcedCompany]);
 
   // Update permissions when role changes and not using custom permissions
   useEffect(() => {
-    if (!useCustomPermissions) {
+    if (!useCustomPermissions || !canManageGlobalScope) {
       setPermissions(DEFAULT_PERMISSIONS[selectedRole]);
     }
-  }, [selectedRole, useCustomPermissions]);
+  }, [selectedRole, useCustomPermissions, canManageGlobalScope]);
 
   const handleSubmit = async (values: UserFormValues) => {
+    const normalizedMeta: AccessMeta = {
+      assignedCompany: derivedCompany,
+      assignedSection: derivedSection,
+      localRole: (accessMeta.localRole || null) as AccessMeta["localRole"],
+      linkedMilitaryId: accessMeta.linkedMilitaryId || null,
+      linkedMilitaryCpf: selectedMilitary?.cpf || accessMeta.linkedMilitaryCpf || null,
+      linkedMilitaryIdentity: selectedMilitary?.identidade || accessMeta.linkedMilitaryIdentity || null,
+      linkedMilitaryEmail: selectedMilitary?.email || accessMeta.linkedMilitaryEmail || null,
+      linkedMilitaryName: selectedMilitary?.nomeCompleto || accessMeta.linkedMilitaryName || null,
+      linkedMilitaryRank: selectedMilitary?.postoGraduacao || accessMeta.linkedMilitaryRank || null,
+    };
+
     await onSubmit({
       ...values,
-      permissions,
+      role: canManageGlobalScope ? values.role : "user",
+      permissions: withAccessMeta(permissions, normalizedMeta),
     });
   };
 
@@ -127,6 +223,44 @@ export function UserDialog({
         [key]: value,
       },
     }));
+  };
+
+  const updateAccessMeta = (key: keyof AccessMeta, value: string | null) => {
+    setAccessMeta((prev) => ({ ...prev, [key]: value || null }));
+  };
+
+  const handleLinkedMilitaryChange = (militaryId: number | null) => {
+    const military = militaryOptions.find((option) => option.id === militaryId) || null;
+
+    setAccessMeta((prev) => {
+      if (!military) {
+        return {
+          ...prev,
+          assignedCompany: null,
+          assignedSection: null,
+          localRole: null,
+          linkedMilitaryId: null,
+          linkedMilitaryCpf: null,
+          linkedMilitaryIdentity: null,
+          linkedMilitaryEmail: null,
+          linkedMilitaryName: null,
+          linkedMilitaryRank: null,
+        };
+      }
+
+      return {
+        ...prev,
+        assignedCompany: military.companhia || null,
+        assignedSection: military.secaoFracao || null,
+        localRole: prev.localRole || "user",
+        linkedMilitaryId: military.id,
+        linkedMilitaryCpf: military.cpf || null,
+        linkedMilitaryIdentity: military.identidade || null,
+        linkedMilitaryEmail: military.email || null,
+        linkedMilitaryName: military.nomeCompleto || null,
+        linkedMilitaryRank: military.postoGraduacao || null,
+      };
+    });
   };
 
   return (
@@ -244,7 +378,7 @@ export function UserDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Perfil de Acesso *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!canManageGlobalScope}>
                         <FormControl>
                           <SelectTrigger data-testid="select-role">
                             <SelectValue />
@@ -257,33 +391,194 @@ export function UserDialog({
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        Define as permissões padrão. Você pode customizar na aba "Permissões".
+                        {canManageGlobalScope
+                          ? "Define o papel global do usuário. Apenas militares do S1 devem receber gerente/administrador global."
+                          : "Escopo global bloqueado. Este usuário será mantido como usuário global e terá apenas escopo local."}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                {canManageGlobalScope && selectedRole !== "user" && (
+                  <p
+                    className={cn(
+                      "text-sm",
+                      accessMeta.linkedMilitaryId && normalizeAccessValue(derivedSection) === "S1"
+                        ? "text-emerald-600"
+                        : "text-amber-600",
+                    )}
+                  >
+                    {accessMeta.linkedMilitaryId && normalizeAccessValue(derivedSection) === "S1"
+                      ? "O militar vinculado pertence ao S1 e pode receber perfil global elevado."
+                      : "Perfis globais de gerente/administrador exigem militar vinculado ao S1."}
+                  </p>
+                )}
               </TabsContent>
 
               <TabsContent value="permissions" className="space-y-4 mt-4">
-                <div className="flex items-center space-x-2 mb-4">
-                  <Checkbox
-                    id="custom-permissions"
-                    checked={useCustomPermissions}
-                    onCheckedChange={(checked) => {
-                      setUseCustomPermissions(checked as boolean);
-                      if (!checked) {
-                        setPermissions(DEFAULT_PERMISSIONS[selectedRole]);
-                      }
-                    }}
-                    data-testid="checkbox-custom-permissions"
-                  />
-                  <Label htmlFor="custom-permissions" className="cursor-pointer">
-                    Customizar permissões (caso contrário, usar padrão do perfil)
-                  </Label>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Escopo Local por Companhia</CardTitle>
+                    <CardDescription>
+                      Vincule o usuário a um militar. Companhia e SEÇ/FRAÇÃO passam a ser sincronizadas automaticamente a partir desse militar.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Militar Vinculado</Label>
+                      <Popover open={militaryPickerOpen} onOpenChange={setMilitaryPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between"
+                            data-testid="button-linked-military"
+                          >
+                            <span className="truncate text-left font-normal">
+                              {selectedMilitary
+                                ? `${selectedMilitary.postoGraduacao} - ${selectedMilitary.nomeCompleto} (${selectedMilitary.companhia})`
+                                : accessMeta.linkedMilitaryName
+                                  ? `${accessMeta.linkedMilitaryRank || "-"} - ${accessMeta.linkedMilitaryName}`
+                                  : "Selecione o militar para sincronizar o acesso"}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[520px] p-0" align="start">
+                          <Command>
+                            <CommandInput placeholder="Buscar por nome, posto, companhia ou secao..." />
+                            <CommandList>
+                              <CommandEmpty>Nenhum militar disponivel.</CommandEmpty>
+                              <CommandGroup className="max-h-72 overflow-auto">
+                                {visibleMilitaryOptions.map((military) => (
+                                  <CommandItem
+                                    key={military.id}
+                                    value={`${military.postoGraduacao} ${military.nomeCompleto} ${military.companhia} ${military.secaoFracao || ""}`}
+                                    onSelect={() => {
+                                      handleLinkedMilitaryChange(military.id);
+                                      setMilitaryPickerOpen(false);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        accessMeta.linkedMilitaryId === military.id ? "opacity-100" : "opacity-0",
+                                      )}
+                                    />
+                                    <div className="flex flex-col">
+                                      <span>{`${military.postoGraduacao} - ${military.nomeCompleto}`}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {`${military.companhia}${military.secaoFracao ? ` • ${military.secaoFracao}` : ""}`}
+                                      </span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>
+                          {forcedCompany
+                            ? `A lista esta restrita a ${forcedCompany}.`
+                            : "Somente um usuario pode ficar vinculado a cada militar."}
+                        </span>
+                        {accessMeta.linkedMilitaryId && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-auto px-0 text-xs"
+                            onClick={() => handleLinkedMilitaryChange(null)}
+                            data-testid="button-clear-linked-military"
+                          >
+                            Remover vinculo
+                          </Button>
+                        )}
+                      </div>
+                    </div>
 
-                {useCustomPermissions && (
+                    <div className="space-y-2">
+                      <Label>Nível Local</Label>
+                      <Select
+                        value={accessMeta.localRole || "none"}
+                        onValueChange={(value) => updateAccessMeta("localRole", value === "none" ? null : value)}
+                        disabled={!derivedCompany}
+                      >
+                        <SelectTrigger data-testid="select-local-role">
+                          <SelectValue placeholder="Sem escopo local" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem escopo local</SelectItem>
+                          <SelectItem value="user">Usuário Local</SelectItem>
+                          <SelectItem value="manager">Gerente Local</SelectItem>
+                          <SelectItem value="administrator">Administrador Local</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Companhia Sincronizada</Label>
+                      <Input
+                        value={derivedCompany || ""}
+                        readOnly
+                        placeholder="Definida pelo militar vinculado"
+                        data-testid="input-derived-company"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>SEÇ/FRAÇÃO Sincronizada</Label>
+                      <Input
+                        value={derivedSection || ""}
+                        readOnly
+                        placeholder="Definida pelo militar vinculado"
+                        data-testid="input-derived-section"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status do Vínculo</Label>
+                      <Input
+                        value={accessMeta.linkedMilitaryId ? "Sincronizacao automatica ativa" : linkIsLegacy ? "Escopo legado sem sincronizacao" : "Sem militar vinculado"}
+                        readOnly
+                        data-testid="input-link-status"
+                      />
+                    </div>
+                    {linkIsLegacy && (
+                      <p className="text-xs text-amber-600 md:col-span-2">
+                        Este usuario ainda usa companhia/secao legadas. Vincule um militar para ativar a sincronizacao automatica.
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground md:col-span-2">
+                      Gerente e Administrador globais so podem ser atribuídos quando o militar vinculado pertence ao S1.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {canManageGlobalScope && (
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Checkbox
+                      id="custom-permissions"
+                      checked={useCustomPermissions}
+                      onCheckedChange={(checked) => {
+                        setUseCustomPermissions(checked as boolean);
+                        if (!checked) {
+                          setPermissions(DEFAULT_PERMISSIONS[selectedRole]);
+                        }
+                      }}
+                      data-testid="checkbox-custom-permissions"
+                    />
+                    <Label htmlFor="custom-permissions" className="cursor-pointer">
+                      Customizar permissões globais (caso contrário, usar padrão do perfil)
+                    </Label>
+                  </div>
+                )}
+
+                {canManageGlobalScope && useCustomPermissions && (
                   <div className="space-y-4">
                     <Card>
                       <CardHeader>
@@ -434,12 +729,14 @@ export function UserDialog({
                   </div>
                 )}
 
-                {!useCustomPermissions && (
+                {(!canManageGlobalScope || !useCustomPermissions) && (
                   <Card className="bg-muted/50">
                     <CardHeader>
-                      <CardTitle className="text-sm">Permissões Padrão: {selectedRole === "user" ? "Usuário" : selectedRole === "manager" ? "Gerente" : "Administrador"}</CardTitle>
+                      <CardTitle className="text-sm">Permissões Globais Padrão: {selectedRole === "user" ? "Usuário" : selectedRole === "manager" ? "Gerente" : "Administrador"}</CardTitle>
                       <CardDescription>
-                        Marque a opção acima para customizar permissões específicas
+                        {canManageGlobalScope
+                          ? "Marque a opção acima para customizar permissões globais específicas."
+                          : "Este formulário está limitado ao escopo local. As permissões globais permanecem no perfil de usuário."}
                       </CardDescription>
                     </CardHeader>
                   </Card>

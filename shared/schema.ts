@@ -45,8 +45,24 @@ export const upsertUserSchema = createInsertSchema(users).omit({
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
+export const ACCESS_ROLES = ["user", "manager", "administrator"] as const;
+export type AccessRole = typeof ACCESS_ROLES[number];
+
+export type AccessMeta = {
+  assignedCompany?: string | null;
+  assignedSection?: string | null;
+  localRole?: AccessRole | null;
+  linkedMilitaryId?: number | null;
+  linkedMilitaryCpf?: string | null;
+  linkedMilitaryIdentity?: string | null;
+  linkedMilitaryEmail?: string | null;
+  linkedMilitaryName?: string | null;
+  linkedMilitaryRank?: string | null;
+};
+
 // Permission system - granular permissions for each feature
 export type Permission = {
+  __meta?: AccessMeta;
   dashboard?: {
     view?: boolean;
   };
@@ -107,7 +123,7 @@ export const createUserSchema = z.object({
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
   nomeGuerra: z.string().optional(),
   postoGraduacao: z.string().optional(),
-  role: z.enum(["user", "manager", "administrator"]),
+  role: z.enum(ACCESS_ROLES),
   permissions: z.custom<Permission>().optional(),
 });
 

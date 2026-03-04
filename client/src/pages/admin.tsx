@@ -37,13 +37,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Shield, Users, Settings, Upload, UserPlus, Pencil, Trash2 } from "lucide-react";
 import { getInitials } from "@/lib/utils";
-import type { User } from "@shared/schema";
+import type { MilitaryPersonnel, Permission, User } from "@shared/schema";
 import { UserDialog } from "@/components/UserDialog";
 import { CustomFieldsManager } from "@/components/CustomFieldsManager";
+import { getAccessMeta } from "@shared/accessControl";
 
 export default function Admin() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading, hasPermission } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, hasPermission, isGlobalAdmin, assignedCompany } = useAuth();
   const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
   const [sheetName, setSheetName] = useState("Sheet1");
   const [file, setFile] = useState<File | null>(null);
@@ -55,7 +56,7 @@ export default function Admin() {
 
   const canViewUsers = hasPermission("usuarios", "view");
   const canManageUsers = hasPermission("usuarios", "manage");
-  const canImport = hasPermission("importar", "import");
+  const canImport = isGlobalAdmin && hasPermission("importar", "import");
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -82,6 +83,11 @@ export default function Admin() {
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: isAuthenticated && canViewUsers,
+  });
+
+  const { data: militaryOptions = [], isLoading: militaryOptionsLoading } = useQuery<MilitaryPersonnel[]>({
+    queryKey: ["/api/militares"],
+    enabled: isAuthenticated && canManageUsers,
   });
 
   const updateRoleMutation = useMutation({
@@ -319,7 +325,7 @@ export default function Admin() {
     }
   };
 
-  if (authLoading || isLoading) {
+  if (authLoading || isLoading || (canManageUsers && militaryOptionsLoading)) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted-foreground">Carregando...</div>
@@ -347,6 +353,23 @@ export default function Admin() {
     return <Badge variant="outline">Usuário</Badge>;
   };
 
+  const getLocalRoleBadge = (user: User) => {
+    const meta = getAccessMeta(user.permissions as Permission | null | undefined);
+    if (!meta.localRole || !meta.assignedCompany) {
+      return <Badge variant="outline">Sem escopo local</Badge>;
+    }
+
+    if (meta.localRole === "administrator") {
+      return <Badge variant="default">{`Adm ${meta.assignedCompany}`}</Badge>;
+    }
+
+    if (meta.localRole === "manager") {
+      return <Badge variant="secondary">{`Ger ${meta.assignedCompany}`}</Badge>;
+    }
+
+    return <Badge variant="outline">{`Usr ${meta.assignedCompany}`}</Badge>;
+  };
+
   const userStats = {
     total: users.length,
     administrators: users.filter((u) => u.role === "administrator").length,
@@ -358,7 +381,11 @@ export default function Admin() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-primary">Administração</h1>
-        <p className="text-muted-foreground">Gerenciamento de usuários e importação de dados</p>
+        <p className="text-muted-foreground">
+          {isGlobalAdmin
+            ? "Gerenciamento global de usuários, importações e escopos locais"
+            : `Gerenciamento local de usuários da ${assignedCompany || "sua companhia"}`}
+        </p>
       </div>
 
       {canImport && (
@@ -461,7 +488,7 @@ export default function Admin() {
         </Card>
       )}
 
-      {canManageUsers && (
+      {isGlobalAdmin && (
         <CustomFieldsManager />
       )}
 
@@ -533,12 +560,17 @@ export default function Admin() {
                 <TableHead>Email</TableHead>
                 <TableHead>Nome de Guerra</TableHead>
                 <TableHead>Posto/Grad</TableHead>
-                <TableHead>Nível de Acesso</TableHead>
+                <TableHead>Militar Vinculado</TableHead>
+                <TableHead>Global</TableHead>
+                <TableHead>Local</TableHead>
+                <TableHead>SEÇ/FRAÇÃO</TableHead>
                 {canManageUsers && <TableHead className="text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {users.map((user) => {
+                const meta = getAccessMeta(user.permissions as Permission | null | undefined);
+                return (
                 <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -557,7 +589,14 @@ export default function Admin() {
                   <TableCell className="text-sm">{user.email || "-"}</TableCell>
                   <TableCell className="text-sm">{user.nomeGuerra || "-"}</TableCell>
                   <TableCell className="text-sm">{user.postoGraduacao || "-"}</TableCell>
+                  <TableCell className="text-sm">
+                    {meta.linkedMilitaryName
+                      ? `${meta.linkedMilitaryRank || "-"} - ${meta.linkedMilitaryName}`
+                      : "Não vinculado"}
+                  </TableCell>
                   <TableCell>{getRoleBadge(user.role)}</TableCell>
+                  <TableCell>{getLocalRoleBadge(user)}</TableCell>
+                  <TableCell className="text-sm">{meta.assignedSection || "-"}</TableCell>
                   {canManageUsers && (
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -583,7 +622,8 @@ export default function Admin() {
                     </TableCell>
                   )}
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
@@ -600,6 +640,10 @@ export default function Admin() {
         user={selectedUser}
         onSubmit={handleUserSubmit}
         isPending={createUserMutation.isPending || updateUserMutation.isPending}
+        canManageGlobalScope={isGlobalAdmin}
+        forcedCompany={isGlobalAdmin ? null : assignedCompany}
+        militaryOptions={militaryOptions}
+        existingUsers={users}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

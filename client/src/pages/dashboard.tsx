@@ -127,7 +127,7 @@ function getRankOrder(rank: string): number {
 
 export default function Dashboard() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading, user, isAdmin } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, isGlobalAdmin, isLocalAdmin, isLocalManager } = useAuth();
 
   // Estado para seleção de gráficos
   const [chartType1, setChartType1] = useState<ChartType>("bar");
@@ -644,7 +644,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Visualizações interativas e análise de dados do efetivo</p>
       </div>
 
-      {!isAdmin && user?.role === "user" && (
+      {!isGlobalAdmin && !isLocalAdmin && !isLocalManager && user?.role === "user" && (
         <BootstrapAdmin />
       )}
 

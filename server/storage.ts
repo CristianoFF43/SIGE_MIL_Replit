@@ -19,10 +19,16 @@ import {
   type InsertUserPreference,
   type FilterTree,
   DEFAULT_PERMISSIONS,
+  type AccessMeta,
 } from "@shared/schema";
+import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
 import { db } from "./db";
 import { eq, ilike, or, and, sql, SQL } from "drizzle-orm";
 import { buildFilterPredicate } from "./filterBuilder";
+
+function normalizeEmail(value?: string | null): string {
+  return value?.trim().toLowerCase() || "";
+}
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -165,13 +171,16 @@ export class DatabaseStorage implements IStorage {
 
   private mergePermissions(role: string, storedPermissions: any): any {
     const defaults = DEFAULT_PERMISSIONS[role] as any;
+    const meta = storedPermissions?.__meta;
 
     // For administrators, always enforce the latest default permissions
     // This ensures they always have access to new features (like import)
     // regardless of what is stored in the database.
     // Case-insensitive check and trim whitespace
     if (role && role.trim().toLowerCase() === 'administrator') {
-      return DEFAULT_PERMISSIONS.administrator;
+      return meta
+        ? { ...DEFAULT_PERMISSIONS.administrator, __meta: meta }
+        : DEFAULT_PERMISSIONS.administrator;
     }
 
     if (!defaults) return storedPermissions;
@@ -196,27 +205,194 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // User operations
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    if (user && user.permissions) {
-      // Normalize permissions: convert legacy JSON strings to objects
-      if (typeof user.permissions === "string") {
-        try {
-          user.permissions = JSON.parse(user.permissions as string);
-        } catch (e) {
-          console.error("Failed to parse permissions for user", id, e);
-          user.permissions = null;
-        }
+  private hasLinkedMilitaryReference(meta: AccessMeta): boolean {
+    return !!(
+      meta.linkedMilitaryId ||
+      meta.linkedMilitaryCpf ||
+      meta.linkedMilitaryIdentity ||
+      meta.linkedMilitaryEmail ||
+      meta.linkedMilitaryName
+    );
+  }
+
+  private findUniqueMilitaryMatch(
+    personnel: MilitaryPersonnel[],
+    predicate: (militar: MilitaryPersonnel) => boolean,
+  ): MilitaryPersonnel | null {
+    const matches = personnel.filter(predicate);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  private resolveLinkedMilitaryFromList(
+    meta: AccessMeta,
+    personnel: MilitaryPersonnel[],
+  ): MilitaryPersonnel | null {
+    if (!this.hasLinkedMilitaryReference(meta)) {
+      return null;
+    }
+
+    if (typeof meta.linkedMilitaryId === "number") {
+      const byId = personnel.find((militar) => militar.id === meta.linkedMilitaryId);
+      if (byId) {
+        return byId;
       }
     }
 
-    // Merge with defaults to ensure new permissions (like import) are available
-    if (user) {
-      user.permissions = this.mergePermissions(user.role, user.permissions);
+    const normalizedCpf = normalizeAccessValue(meta.linkedMilitaryCpf);
+    if (normalizedCpf) {
+      const byCpf = this.findUniqueMilitaryMatch(
+        personnel,
+        (militar) => normalizeAccessValue(militar.cpf) === normalizedCpf,
+      );
+      if (byCpf) {
+        return byCpf;
+      }
     }
 
+    const normalizedIdentity = normalizeAccessValue(meta.linkedMilitaryIdentity);
+    if (normalizedIdentity) {
+      const byIdentity = this.findUniqueMilitaryMatch(
+        personnel,
+        (militar) => normalizeAccessValue(militar.identidade) === normalizedIdentity,
+      );
+      if (byIdentity) {
+        return byIdentity;
+      }
+    }
+
+    const normalizedEmail = normalizeEmail(meta.linkedMilitaryEmail);
+    if (normalizedEmail) {
+      const byEmail = this.findUniqueMilitaryMatch(
+        personnel,
+        (militar) => normalizeEmail(militar.email) === normalizedEmail,
+      );
+      if (byEmail) {
+        return byEmail;
+      }
+    }
+
+    const normalizedName = normalizeAccessValue(meta.linkedMilitaryName);
+    const normalizedCompany = normalizeAccessValue(meta.assignedCompany);
+    const normalizedSection = normalizeAccessValue(meta.assignedSection);
+    const normalizedRank = normalizeAccessValue(meta.linkedMilitaryRank);
+
+    if (normalizedName && normalizedCompany && normalizedRank) {
+      return this.findUniqueMilitaryMatch(
+        personnel,
+        (militar) =>
+          normalizeAccessValue(militar.nomeCompleto) === normalizedName &&
+          normalizeAccessValue(militar.companhia) === normalizedCompany &&
+          normalizeAccessValue(militar.postoGraduacao) === normalizedRank &&
+          (!normalizedSection || normalizeAccessValue(militar.secaoFracao) === normalizedSection),
+      );
+    }
+
+    return null;
+  }
+
+  private buildAccessMetaFromMilitary(
+    previousMeta: AccessMeta,
+    militar?: MilitaryPersonnel | null,
+  ): AccessMeta {
+    if (!militar) {
+      return {
+        ...previousMeta,
+        assignedCompany: null,
+        assignedSection: null,
+      };
+    }
+
+    return {
+      ...previousMeta,
+      assignedCompany: militar.companhia || null,
+      assignedSection: militar.secaoFracao || null,
+      linkedMilitaryId: militar.id,
+      linkedMilitaryCpf: militar.cpf || null,
+      linkedMilitaryIdentity: militar.identidade || null,
+      linkedMilitaryEmail: militar.email || null,
+      linkedMilitaryName: militar.nomeCompleto || null,
+      linkedMilitaryRank: militar.postoGraduacao || null,
+    };
+  }
+
+  private isSameAccessMeta(left: AccessMeta, right: AccessMeta): boolean {
+    return (
+      (left.assignedCompany || null) === (right.assignedCompany || null) &&
+      (left.assignedSection || null) === (right.assignedSection || null) &&
+      (left.localRole || null) === (right.localRole || null) &&
+      (left.linkedMilitaryId || null) === (right.linkedMilitaryId || null) &&
+      (left.linkedMilitaryCpf || null) === (right.linkedMilitaryCpf || null) &&
+      (left.linkedMilitaryIdentity || null) === (right.linkedMilitaryIdentity || null) &&
+      (left.linkedMilitaryEmail || null) === (right.linkedMilitaryEmail || null) &&
+      (left.linkedMilitaryName || null) === (right.linkedMilitaryName || null) &&
+      (left.linkedMilitaryRank || null) === (right.linkedMilitaryRank || null)
+    );
+  }
+
+  private async syncUserAccessMeta(
+    user: User,
+    personnel?: MilitaryPersonnel[],
+  ): Promise<User> {
+    const currentPermissions = (user.permissions as any) || null;
+    const currentMeta = getAccessMeta(currentPermissions);
+
+    if (!this.hasLinkedMilitaryReference(currentMeta)) {
+      user.permissions = this.mergePermissions(user.role, currentPermissions);
+      return user;
+    }
+
+    let linkedMilitary: MilitaryPersonnel | null = null;
+
+    if (personnel) {
+      linkedMilitary = this.resolveLinkedMilitaryFromList(currentMeta, personnel);
+    } else if (typeof currentMeta.linkedMilitaryId === "number") {
+      linkedMilitary = await this.getMilitaryPersonnelById(currentMeta.linkedMilitaryId) || null;
+    }
+
+    if (!linkedMilitary) {
+      const allPersonnel = personnel || await db.select().from(militaryPersonnel);
+      linkedMilitary = this.resolveLinkedMilitaryFromList(currentMeta, allPersonnel);
+    }
+
+    const syncedMeta = this.buildAccessMetaFromMilitary(currentMeta, linkedMilitary);
+    const basePermissions = currentPermissions || DEFAULT_PERMISSIONS[user.role];
+
+    if (!this.isSameAccessMeta(currentMeta, syncedMeta)) {
+      const syncedPermissions = withAccessMeta(basePermissions, syncedMeta);
+
+      await db
+        .update(users)
+        .set({
+          permissions: syncedPermissions,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      user.permissions = this.mergePermissions(user.role, syncedPermissions);
+      return user;
+    }
+
+    user.permissions = this.mergePermissions(user.role, withAccessMeta(basePermissions, syncedMeta));
     return user;
+  }
+
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    if (!user) {
+      return undefined;
+    }
+
+    if (user.permissions && typeof user.permissions === "string") {
+      try {
+        user.permissions = JSON.parse(user.permissions as string);
+      } catch (e) {
+        console.error("Failed to parse permissions for user", id, e);
+        user.permissions = null;
+      }
+    }
+
+    return await this.syncUserAccessMeta(user);
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -245,7 +421,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users);
-    return allUsers.map((user: User) => {
+    const preparedUsers: User[] = allUsers.map((user: User) => {
       if (user.permissions && typeof user.permissions === "string") {
         try {
           user.permissions = JSON.parse(user.permissions as string);
@@ -255,11 +431,18 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      // Merge with defaults
-      user.permissions = this.mergePermissions(user.role, user.permissions);
-
       return user;
     });
+
+    const hasLinkedRefs = preparedUsers.some((user: User) =>
+      this.hasLinkedMilitaryReference(getAccessMeta(user.permissions as any)),
+    );
+
+    const linkedPersonnel = hasLinkedRefs
+      ? await db.select().from(militaryPersonnel)
+      : [];
+
+    return await Promise.all(preparedUsers.map((user: User) => this.syncUserAccessMeta(user, linkedPersonnel)));
   }
 
   async updateUserRole(userId: string, role: string): Promise<User> {

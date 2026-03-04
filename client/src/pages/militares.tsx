@@ -245,7 +245,14 @@ function EditableCell({
 
 export default function Militares() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading, isManager, isAdmin } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    isManager,
+    isGlobalAdmin,
+    assignedCompany,
+    canManageCompany,
+  } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
@@ -459,6 +466,16 @@ export default function Militares() {
       return (a.nomeCompleto || "").localeCompare(b.nomeCompleto || "");
     });
 
+  const defaultCreateCompany =
+    presetCompany ||
+    (isCefView ? "CEF" : null) ||
+    (filterCompany !== "all" ? filterCompany : null) ||
+    assignedCompany ||
+    null;
+
+  const canCreateInCurrentScope = !!defaultCreateCompany && canManageCompany(defaultCreateCompany, "create");
+  const canDeleteVisibleRows = filteredMilitares.some((militar) => canManageCompany(militar.companhia, "delete"));
+
   const handleCellUpdate = (id: number, field: keyof MilitaryPersonnel | string, value: string) => {
     setSavingCell({ id, field: field as string });
 
@@ -522,10 +539,19 @@ export default function Militares() {
   };
 
   const handleAddNew = () => {
+    if (!defaultCreateCompany || !canCreateInCurrentScope) {
+      toast({
+        title: "Acesso negado",
+        description: "Você só pode adicionar militares dentro da sua companhia.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newMilitar: InsertMilitaryPersonnel = {
       nomeCompleto: "Novo Militar",
       postoGraduacao: "Sd 1ª Cl",
-      companhia: "1ª CIA",
+      companhia: defaultCreateCompany,
       ord: filteredMilitares.length + 1,
     };
     createMutation.mutate(newMilitar);
@@ -552,9 +578,9 @@ export default function Militares() {
           <h1 className="text-3xl font-bold text-primary">{heading}</h1>
           <p className="text-muted-foreground">Gestão completa de militares - Edição inline estilo Excel</p>
         </div>
-        {isManager && (
+        {(isGlobalAdmin || canCreateInCurrentScope) && (
           <div className="flex gap-2">
-            {isAdmin && (
+            {isGlobalAdmin && (
               <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="outline" data-testid="button-manage-columns">
@@ -570,7 +596,7 @@ export default function Militares() {
                 </DialogContent>
               </Dialog>
             )}
-            <Button onClick={handleAddNew} data-testid="button-add-militar">
+            <Button onClick={handleAddNew} data-testid="button-add-militar" disabled={!canCreateInCurrentScope}>
               <UserPlus className="h-4 w-4 mr-2" />
               Adicionar Nova Linha
             </Button>
@@ -686,8 +712,7 @@ export default function Militares() {
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-sm">
           <p className="font-medium text-primary mb-1">💡 Modo de Edição Ativo</p>
           <p className="text-muted-foreground">
-            Clique em qualquer célula para editar. Pressione Enter para salvar ou Esc para cancelar.
-            As alterações são salvas automaticamente.
+            A edição e exclusão respeitam o escopo global/local do usuário. Pressione Enter para salvar ou Esc para cancelar.
           </p>
         </div>
       )}
@@ -714,21 +739,25 @@ export default function Militares() {
                   {field.label}
                 </TableHead>
               ))}
-              {isAdmin && <TableHead className="w-[80px]">Ações</TableHead>}
+              {canDeleteVisibleRows && <TableHead className="w-[80px]">Ações</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredMilitares.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 13 + customFields.length : 12 + customFields.length} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canDeleteVisibleRows ? 13 + customFields.length : 12 + customFields.length} className="text-center py-8 text-muted-foreground">
                   Nenhum militar encontrado
                 </TableCell>
               </TableRow>
             ) : (
-              filteredMilitares.map((militar) => (
+              filteredMilitares.map((militar) => {
+                const canEditRow = canManageCompany(militar.companhia, "edit");
+                const canDeleteRow = canManageCompany(militar.companhia, "delete");
+
+                return (
                 <TableRow key={militar.id} data-testid={`row-militar-${militar.id}`}>
                   <TableCell className="font-mono text-sm">
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.ord}
                         onSave={(val) => handleCellUpdate(militar.id, "ord", val)}
@@ -743,7 +772,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.nomeCompleto}
                         onSave={(val) => handleCellUpdate(militar.id, "nomeCompleto", val)}
@@ -759,7 +788,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.nomeGuerra}
                         onSave={(val) => handleCellUpdate(militar.id, "nomeGuerra", val)}
@@ -774,7 +803,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.postoGraduacao}
                         onSave={(val) => handleCellUpdate(militar.id, "postoGraduacao", val)}
@@ -790,7 +819,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.companhia}
                         onSave={(val) => handleCellUpdate(militar.id, "companhia", val)}
@@ -805,7 +834,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.secaoFracao}
                         onSave={(val) => handleCellUpdate(militar.id, "secaoFracao", val)}
@@ -820,7 +849,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.funcao}
                         onSave={(val) => handleCellUpdate(militar.id, "funcao", val)}
@@ -835,7 +864,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.situacao}
                         onSave={(val) => handleCellUpdate(militar.id, "situacao", val)}
@@ -863,7 +892,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.missaoOp}
                         onSave={(val) => handleCellUpdate(militar.id, "missaoOp", val)}
@@ -878,7 +907,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.cpf}
                         onSave={(val) => handleCellUpdate(militar.id, "cpf", val)}
@@ -895,7 +924,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.telefoneContato1}
                         onSave={(val) => handleCellUpdate(militar.id, "telefoneContato1", val)}
@@ -912,7 +941,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.email}
                         onSave={(val) => handleCellUpdate(militar.id, "email", val)}
@@ -928,7 +957,7 @@ export default function Militares() {
                   </TableCell>
 
                   <TableCell>
-                    {isManager ? (
+                    {canEditRow ? (
                       <EditableCell
                         value={militar.temp}
                         onSave={(val) => handleCellUpdate(militar.id, "temp", val)}
@@ -949,7 +978,7 @@ export default function Militares() {
 
                     return (
                       <TableCell key={field.id}>
-                        {isManager ? (
+                        {canEditRow ? (
                           <EditableCell
                             value={fieldValue}
                             onSave={(val) => handleCellUpdate(militar.id, field.name, val)}
@@ -967,24 +996,27 @@ export default function Militares() {
                     );
                   })}
 
-                  {isAdmin && (
+                  {canDeleteVisibleRows && (
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          if (confirm(`Confirma a remoção de ${militar.nomeCompleto}?`)) {
-                            deleteMutation.mutate(militar.id);
-                          }
-                        }}
-                        data-testid={`button-delete-${militar.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      {canDeleteRow && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm(`Confirma a remoção de ${militar.nomeCompleto}?`)) {
+                              deleteMutation.mutate(militar.id);
+                            }
+                          }}
+                          data-testid={`button-delete-${militar.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
                     </TableCell>
                   )}
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>

@@ -1,7 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { useFirebaseAuth } from "@/contexts/AuthContext";
-import type { User } from "@shared/schema";
-import { DEFAULT_PERMISSIONS } from "@shared/schema";
+import { DEFAULT_PERMISSIONS, type AccessRole, type Permission, type User } from "@shared/schema";
+import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isSameCompany } from "@shared/accessControl";
+
+type PermissionSection = Exclude<keyof Permission, "__meta">;
+
+function normalizeRole(role?: string | null): AccessRole {
+  if (role === "administrator" || role === "manager") return role;
+  return "user";
+}
+
+function readPermissionValue(
+  permissions: Permission | null | undefined,
+  section: string,
+  action: string,
+): boolean | undefined {
+  const sectionPerms = permissions?.[section as PermissionSection] as Record<string, boolean> | undefined;
+  if (sectionPerms && typeof sectionPerms[action] === "boolean") {
+    return sectionPerms[action];
+  }
+  return undefined;
+}
 
 export function useAuth() {
   const { user: firebaseUser, loading: firebaseLoading, idToken } = useFirebaseAuth();
@@ -20,36 +39,80 @@ export function useAuth() {
   if (user) console.log("[useAuth] DB User found:", user.email);
   if (queryError) console.error("[useAuth] Query Error:", queryError);
 
-  const hasPermission = (section: string, action: string): boolean => {
+  const globalRole = normalizeRole(user?.role);
+  const accessMeta = getAccessMeta(user?.permissions as Permission | null | undefined);
+  const localRole = accessMeta.localRole ? normalizeRole(accessMeta.localRole) : null;
+
+  const hasGlobalPermission = (section: string, action: string): boolean => {
     if (!user) return false;
+    if (globalRole === "administrator") return true;
 
-    if (user.role === "administrator") return true;
+    const stored = readPermissionValue(user.permissions as Permission | null | undefined, section, action);
+    if (typeof stored === "boolean") return stored;
 
-    if (user.permissions && typeof user.permissions === "object") {
-      const sectionPerms = (user.permissions as any)[section];
-      if (sectionPerms && typeof sectionPerms[action] === "boolean") {
-        return sectionPerms[action];
-      }
-    }
-
-    const defaultPerms = DEFAULT_PERMISSIONS[user.role as keyof typeof DEFAULT_PERMISSIONS];
-    if (defaultPerms) {
-      const sectionPerms = (defaultPerms as any)[section];
-      if (sectionPerms && typeof sectionPerms[action] === "boolean") {
-        return sectionPerms[action];
-      }
-    }
-
-    return false;
+    return readPermissionValue(DEFAULT_PERMISSIONS[globalRole], section, action) ?? false;
   };
+
+  const hasLocalPermission = (section: string, action: string): boolean => {
+    if (!user || !localRole || !accessMeta.assignedCompany) return false;
+    return readPermissionValue(LOCAL_DEFAULT_PERMISSIONS[localRole], section, action) ?? false;
+  };
+
+  const hasPermission = (section: string, action: string): boolean => {
+    return hasGlobalPermission(section, action) || hasLocalPermission(section, action);
+  };
+
+  const canManageCompany = (
+    company: string | null | undefined,
+    action: "view" | "edit" | "create" | "delete",
+  ): boolean => {
+    if (!user) return false;
+    if (action === "view") return hasPermission("militares", "view");
+    if (hasGlobalPermission("militares", action)) return true;
+    if (!localRole || !accessMeta.assignedCompany || !isSameCompany(accessMeta.assignedCompany, company)) return false;
+    return hasLocalPermission("militares", action);
+  };
+
+  const canExportCompany = (company: string | null | undefined): boolean => {
+    if (!user) return false;
+    if (hasGlobalPermission("relatorios", "export")) return true;
+    return !!accessMeta.assignedCompany && isSameCompany(accessMeta.assignedCompany, company) && hasLocalPermission("relatorios", "export");
+  };
+
+  const roleLabel = user?.role === "administrator"
+    ? "Administrador Global"
+    : user?.role === "manager"
+      ? "Gerente Global"
+      : localRole === "administrator" && accessMeta.assignedCompany
+        ? `Administrador ${accessMeta.assignedCompany}`
+        : localRole === "manager" && accessMeta.assignedCompany
+          ? `Gerente ${accessMeta.assignedCompany}`
+          : accessMeta.assignedCompany
+            ? `Usuário ${accessMeta.assignedCompany}`
+            : "Usuário";
 
   return {
     user,
     isLoading: firebaseLoading || userDataLoading,
     isAuthenticated: !!user,
-    isAdmin: user?.role === "administrator",
-    isManager: user?.role === "manager" || user?.role === "administrator",
+    isAdmin: globalRole === "administrator" || localRole === "administrator",
+    isManager: ["manager", "administrator"].includes(globalRole) || ["manager", "administrator"].includes(localRole || ""),
     isUser: !!user,
+    isGlobalAdmin: globalRole === "administrator",
+    isGlobalManager: globalRole === "manager" || globalRole === "administrator",
+    isLocalAdmin: localRole === "administrator" && !!accessMeta.assignedCompany,
+    isLocalManager: (localRole === "manager" || localRole === "administrator") && !!accessMeta.assignedCompany,
+    globalRole,
+    localRole,
+    assignedCompany: accessMeta.assignedCompany || null,
+    assignedSection: accessMeta.assignedSection || null,
+    roleLabel,
+    hasGlobalPermission,
+    hasLocalPermission,
     hasPermission,
+    canManageCompany,
+    canExportCompany,
+    canManageUsersGlobally: hasGlobalPermission("usuarios", "manage"),
+    canViewUsersGlobally: hasGlobalPermission("usuarios", "view"),
   };
 }

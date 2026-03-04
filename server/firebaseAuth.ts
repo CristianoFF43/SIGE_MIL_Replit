@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import admin from "firebase-admin";
 import { storage } from "./storage.js";
 import { DEFAULT_PERMISSIONS } from "@shared/schema";
+import { buildAccessContext, hasEffectivePermission } from "./accessControl.js";
 
 let firebaseInitialized = false;
 
@@ -99,6 +100,8 @@ export const firebaseAuth: RequestHandler = async (req, res, next) => {
         user = await storage.getUser(userId);
       }
 
+      (req as any).authUser = user;
+      (req as any).accessContext = buildAccessContext(user!);
       (req as any).user = {
         claims: {
           sub: userId,
@@ -129,31 +132,22 @@ export const requirePermission = (section: string, action: string): RequestHandl
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.getUser(userId);
+      const user = (req as any).authUser ?? await storage.getUser(userId);
 
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }
 
       console.log(`[PERMISSION CHECK] User: ${user.email}, Role: ${user.role}, Section: ${section}, Action: ${action}`);
-      // console.log(`[PERMISSION CHECK] Permissions:`, JSON.stringify(user.permissions, null, 2));
-
-      if (!user.permissions || typeof user.permissions !== 'object') {
-        console.log(`[PERMISSION CHECK] FAILED: No permissions object`);
-        return res.status(403).json({
-          message: `Forbidden - No permissions configured`
-        });
-      }
-
-      const sectionPerms = (user.permissions as any)[section];
-      if (!sectionPerms || !sectionPerms[action]) {
+      if (!hasEffectivePermission(user, section, action)) {
         console.log(`[PERMISSION CHECK] FAILED: Missing ${section}.${action}`);
-        console.log(`[PERMISSION CHECK] Available for ${section}:`, sectionPerms);
         return res.status(403).json({
           message: `Forbidden - Requires ${section}.${action} permission`
         });
       }
 
+      (req as any).authUser = user;
+      (req as any).accessContext = buildAccessContext(user);
       next();
     } catch (error) {
       console.error("Permission check error:", error);

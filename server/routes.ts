@@ -8,6 +8,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import {
+  ACCESS_ROLES,
   insertMilitaryPersonnelSchema,
   updateMilitaryPersonnelSchema,
   insertSavedFilterGroupSchema,
@@ -18,9 +19,29 @@ import {
   createUserSchema,
   updateUserSchema,
   DEFAULT_PERMISSIONS,
+  type AccessMeta,
+  type AccessRole,
+  type MilitaryPersonnel,
+  type Permission,
+  type User,
 } from "@shared/schema";
+import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
 import { fromError } from "zod-validation-error";
 import { simpleFiltersToTree } from "./filterBuilder.js";
+import {
+  buildAccessContext,
+  canExportCompany,
+  canManageMilitaryRecord,
+  canManageTargetUser,
+  canManageUsersGlobally,
+  canManageUsersLocally,
+  canViewUsersGlobally,
+  ensureSingleGlobalAdministrator,
+  hasEffectivePermission,
+  hasGlobalPermission,
+  scopeUsersForActor,
+  validateGlobalRoleEligibility,
+} from "./accessControl.js";
 
 const isAuthenticated = firebaseAuth;
 
@@ -39,11 +60,208 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup file upload (in-memory) 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+  const getActor = async (req: any): Promise<User | undefined> => {
+    return req.authUser ?? storage.getUser(req.user?.claims?.sub);
+  };
+
+  const getNormalizedMeta = (permissions?: Permission | null) => {
+    const meta = getAccessMeta(permissions || undefined);
+    const assignedCompany = meta.assignedCompany || null;
+    return {
+      assignedCompany,
+      assignedSection: meta.assignedSection || null,
+      localRole: assignedCompany ? (meta.localRole || "user") : null,
+      linkedMilitaryId: typeof meta.linkedMilitaryId === "number" ? meta.linkedMilitaryId : null,
+      linkedMilitaryCpf: meta.linkedMilitaryCpf || null,
+      linkedMilitaryIdentity: meta.linkedMilitaryIdentity || null,
+      linkedMilitaryEmail: meta.linkedMilitaryEmail || null,
+      linkedMilitaryName: meta.linkedMilitaryName || null,
+      linkedMilitaryRank: meta.linkedMilitaryRank || null,
+    };
+  };
+
+  const normalizeEmail = (value?: string | null) => value?.trim().toLowerCase() || "";
+
+  const hasLinkedMilitaryReference = (meta: AccessMeta | ReturnType<typeof getNormalizedMeta>) => {
+    return !!(
+      meta.linkedMilitaryId ||
+      meta.linkedMilitaryCpf ||
+      meta.linkedMilitaryIdentity ||
+      meta.linkedMilitaryEmail ||
+      meta.linkedMilitaryName
+    );
+  };
+
+  const buildMetaFromMilitary = (
+    baseMeta: ReturnType<typeof getNormalizedMeta>,
+    military?: MilitaryPersonnel | null,
+  ): AccessMeta => {
+    if (!military) {
+      return {
+        ...baseMeta,
+        assignedCompany: null,
+        assignedSection: null,
+      };
+    }
+
+    return {
+      ...baseMeta,
+      assignedCompany: military.companhia || null,
+      assignedSection: military.secaoFracao || null,
+      linkedMilitaryId: military.id,
+      linkedMilitaryCpf: military.cpf || null,
+      linkedMilitaryIdentity: military.identidade || null,
+      linkedMilitaryEmail: military.email || null,
+      linkedMilitaryName: military.nomeCompleto || null,
+      linkedMilitaryRank: military.postoGraduacao || null,
+    };
+  };
+
+  const militaryMatchesLinkedMeta = (
+    meta: ReturnType<typeof getNormalizedMeta>,
+    military: MilitaryPersonnel,
+  ) => {
+    const cpf = normalizeAccessValue(meta.linkedMilitaryCpf);
+    if (cpf && normalizeAccessValue(military.cpf) === cpf) {
+      return true;
+    }
+
+    const identity = normalizeAccessValue(meta.linkedMilitaryIdentity);
+    if (identity && normalizeAccessValue(military.identidade) === identity) {
+      return true;
+    }
+
+    const email = normalizeEmail(meta.linkedMilitaryEmail);
+    if (email && normalizeEmail(military.email) === email) {
+      return true;
+    }
+
+    const linkedName = normalizeAccessValue(meta.linkedMilitaryName);
+    const linkedCompany = normalizeAccessValue(meta.assignedCompany);
+    const linkedSection = normalizeAccessValue(meta.assignedSection);
+    const linkedRank = normalizeAccessValue(meta.linkedMilitaryRank);
+
+    return !!linkedName &&
+      !!linkedCompany &&
+      !!linkedRank &&
+      normalizeAccessValue(military.nomeCompleto) === linkedName &&
+      normalizeAccessValue(military.companhia) === linkedCompany &&
+      normalizeAccessValue(military.postoGraduacao) === linkedRank &&
+      (!linkedSection || normalizeAccessValue(military.secaoFracao) === linkedSection);
+  };
+
+  const ensureUniqueMilitaryLink = (
+    users: User[],
+    military: MilitaryPersonnel,
+    ignoreUserId?: string,
+  ) => {
+    const duplicate = users.find((candidate) => {
+      if (candidate.id === ignoreUserId) {
+        return false;
+      }
+      const meta = getNormalizedMeta(candidate.permissions as Permission | undefined);
+      if (typeof meta.linkedMilitaryId === "number" && meta.linkedMilitaryId === military.id) {
+        return true;
+      }
+      return militaryMatchesLinkedMeta(meta, military);
+    });
+
+    if (duplicate) {
+      throw new Error("Este militar ja esta vinculado a outro usuario");
+    }
+  };
+
+  const resolveRequestedMilitary = async (meta: ReturnType<typeof getNormalizedMeta>) => {
+    if (typeof meta.linkedMilitaryId !== "number") {
+      return null;
+    }
+
+    const military = await storage.getMilitaryPersonnelById(meta.linkedMilitaryId);
+    if (!military) {
+      throw new Error("Militar vinculado nao encontrado. Reabra o formulario e selecione novamente.");
+    }
+
+    return military;
+  };
+
+  const buildManagedUserPayload = async (
+    actor: User,
+    requestedRole: AccessRole,
+    users: User[],
+    requestedPermissions?: Permission,
+    existingUser?: User,
+  ) => {
+    const existingMeta = getNormalizedMeta(existingUser?.permissions as Permission | undefined);
+    const requestedMeta = getNormalizedMeta(requestedPermissions);
+    const linkedMilitary = await resolveRequestedMilitary(requestedMeta);
+    const resolvedMeta = linkedMilitary
+      ? buildMetaFromMilitary(requestedMeta, linkedMilitary)
+      : {
+          ...requestedMeta,
+          assignedCompany: requestedMeta.assignedCompany || null,
+          assignedSection: requestedMeta.assignedSection || null,
+        };
+
+    if (linkedMilitary) {
+      ensureUniqueMilitaryLink(users, linkedMilitary, existingUser?.id);
+    }
+
+    if (resolvedMeta.localRole && !resolvedMeta.assignedCompany) {
+      throw new Error("Vincule um militar para conceder acesso local sincronizado.");
+    }
+
+    if (canManageUsersGlobally(actor)) {
+      const keepingSameGlobalRole = !!existingUser && existingUser.role === requestedRole;
+      if (!keepingSameGlobalRole && !linkedMilitary) {
+        throw new Error("Perfis globais de gerente/administrador exigem um militar vinculado.");
+      }
+
+      if (!keepingSameGlobalRole && !validateGlobalRoleEligibility(requestedRole, resolvedMeta.assignedSection)) {
+        throw new Error("Somente usuarios vinculados a militares do S1 podem receber gerente/administrador global");
+      }
+
+      const basePermissions = requestedPermissions || DEFAULT_PERMISSIONS[requestedRole];
+      return {
+        role: requestedRole,
+        permissions: withAccessMeta(basePermissions, resolvedMeta),
+      };
+    }
+
+    if (!canManageUsersLocally(actor)) {
+      throw new Error("Você não tem permissão para gerenciar usuários");
+    }
+
+    const actorContext = buildAccessContext(actor);
+    if (!actorContext.assignedCompany) {
+      throw new Error("Administrador local sem companhia associada");
+    }
+
+    if (linkedMilitary && normalizeAccessValue(linkedMilitary.companhia) !== normalizeAccessValue(actorContext.assignedCompany)) {
+      throw new Error("O militar vinculado deve pertencer a mesma companhia do administrador local");
+    }
+
+    if (resolvedMeta.assignedCompany && normalizeAccessValue(resolvedMeta.assignedCompany) !== normalizeAccessValue(actorContext.assignedCompany)) {
+      throw new Error("Voce so pode gerenciar usuarios da sua propria companhia");
+    }
+
+    const resolvedLocalRole = resolvedMeta.localRole ?? existingMeta.localRole ?? null;
+    if (resolvedLocalRole && !resolvedMeta.assignedCompany) {
+      throw new Error("Vincule um militar da companhia para ativar o escopo local.");
+    }
+
+    return {
+      role: "user" as AccessRole,
+      permissions: withAccessMeta(DEFAULT_PERMISSIONS.user, {
+        ...resolvedMeta,
+        localRole: resolvedLocalRole,
+      }),
+    };
+  };
+
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const user = await getActor(req);
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -57,44 +275,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User management routes (Permission-based)
-  app.get('/api/users', isAuthenticated, requirePermission("usuarios", "view"), async (req, res) => {
+  app.get('/api/users', isAuthenticated, requirePermission("usuarios", "view"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       const users = await storage.getAllUsers();
-      res.json(users);
+      res.json(scopeUsersForActor(actor, users));
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Failed to fetch users" });
     }
   });
 
-  app.patch('/api/users/:id/role', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.patch('/api/users/:id/role', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       const { id } = req.params;
       const { role } = req.body;
 
-      if (!role || !["user", "manager", "administrator"].includes(role)) {
+      if (!role || !ACCESS_ROLES.includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
 
-      const user = await storage.updateUserRole(id, role);
+      if (!canManageUsersGlobally(actor)) {
+        return res.status(403).json({ message: "Apenas administradores globais podem alterar o papel global" });
+      }
+
+      const users = await storage.getAllUsers();
+      await ensureSingleGlobalAdministrator(users, role, id);
+
+      const target = users.find((user) => user.id === id);
+      if (!target) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const targetMeta = getAccessMeta(target.permissions as Permission | undefined);
+      const keepingSameRole = target.role === role;
+      if (!keepingSameRole && role !== "user" && !hasLinkedMilitaryReference(targetMeta)) {
+        return res.status(400).json({ message: "Perfis globais elevados exigem militar vinculado" });
+      }
+
+      if (!keepingSameRole && !validateGlobalRoleEligibility(role, targetMeta.assignedSection)) {
+        return res.status(400).json({ message: "Somente usuários do S1 podem receber gerente/administrador global" });
+      }
+
+      const user = await storage.updateUser(id, {
+        role,
+        permissions: withAccessMeta(DEFAULT_PERMISSIONS[role], targetMeta),
+      });
       res.json(user);
     } catch (error) {
       console.error("Error updating user role:", error);
-      res.status(500).json({ message: "Failed to update user role" });
+      const err = error as Error;
+      res.status(500).json({ message: err.message || "Failed to update user role" });
     }
   });
 
   // Create new user (Permission-based)
-  app.post('/api/users', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.post('/api/users', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
-      const validated = createUserSchema.parse(req.body);
-
-      // If no custom permissions provided, use default for the role
-      if (!validated.permissions) {
-        validated.permissions = DEFAULT_PERMISSIONS[validated.role];
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const user = await storage.createUser(validated);
+      const validated = createUserSchema.parse(req.body);
+      const users = await storage.getAllUsers();
+      const managedPayload = await buildManagedUserPayload(actor, validated.role, users, validated.permissions);
+
+      await ensureSingleGlobalAdministrator(users, managedPayload.role);
+
+      const user = await storage.createUser({
+        ...validated,
+        role: managedPayload.role,
+        permissions: managedPayload.permissions,
+      });
       res.json(user);
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -102,17 +362,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validationError.toString() });
       }
       console.error("Error creating user:", error);
-      res.status(500).json({ message: "Failed to create user" });
+      res.status(500).json({ message: error.message || "Failed to create user" });
     }
   });
 
   // Update user (Permission-based)
-  app.patch('/api/users/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.patch('/api/users/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { id } = req.params;
       const validated = updateUserSchema.parse({ ...req.body, id });
+      const existingUser = await storage.getUser(id);
 
-      const user = await storage.updateUser(id, validated);
+      if (!existingUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (!canManageTargetUser(actor, existingUser) && !canManageUsersGlobally(actor)) {
+        return res.status(403).json({ message: "Você só pode gerenciar usuários da sua própria companhia" });
+      }
+
+      const users = await storage.getAllUsers();
+      const requestedRole = (validated.role || existingUser.role) as AccessRole;
+      const requestedPermissions = (validated.permissions as Permission | undefined) || (existingUser.permissions as Permission | undefined);
+      const managedPayload = await buildManagedUserPayload(actor, requestedRole, users, requestedPermissions, existingUser);
+
+      await ensureSingleGlobalAdministrator(users, managedPayload.role, id);
+
+      const user = await storage.updateUser(id, {
+        ...validated,
+        role: managedPayload.role,
+        permissions: managedPayload.permissions,
+      });
       res.json(user);
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -120,19 +405,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: validationError.toString() });
       }
       console.error("Error updating user:", error);
-      res.status(500).json({ message: "Failed to update user" });
+      res.status(500).json({ message: error.message || "Failed to update user" });
     }
   });
 
   // Delete user (Permission-based)
-  app.delete('/api/users/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.delete('/api/users/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { id } = req.params;
       const currentUserId = (req.user as any)?.claims?.sub;
 
       // Prevent self-deletion
       if (id === currentUserId) {
         return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (!canManageTargetUser(actor, targetUser) && !canManageUsersGlobally(actor)) {
+        return res.status(403).json({ message: "Você só pode excluir usuários da sua própria companhia" });
       }
 
       await storage.deleteUser(id);
@@ -214,9 +513,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/militares', isAuthenticated, requirePermission("militares", "create"), async (req, res) => {
+  app.post('/api/militares', isAuthenticated, requirePermission("militares", "create"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const validatedData = insertMilitaryPersonnelSchema.parse(req.body);
+      if (!canManageMilitaryRecord(actor, validatedData.companhia, "create")) {
+        return res.status(403).json({ message: "Você só pode criar militares dentro da sua companhia" });
+      }
       const militar = await storage.createMilitaryPersonnel(validatedData);
       res.status(201).json(militar);
     } catch (error: any) {
@@ -229,10 +536,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/militares/:id', isAuthenticated, requirePermission("militares", "edit"), async (req, res) => {
+  app.patch('/api/militares/:id', isAuthenticated, requirePermission("militares", "edit"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const id = parseInt(req.params.id);
       const validatedData = updateMilitaryPersonnelSchema.parse(req.body);
+      const existing = await storage.getMilitaryPersonnelById(id);
+
+      if (!existing) {
+        return res.status(404).json({ message: "Military personnel not found" });
+      }
+
+      const targetCompany = validatedData.companhia || existing.companhia;
+      if (!canManageMilitaryRecord(actor, existing.companhia, "edit") || !canManageMilitaryRecord(actor, targetCompany, "edit")) {
+        return res.status(403).json({ message: "Você só pode editar militares da sua companhia" });
+      }
 
       const militar = await storage.updateMilitaryPersonnel(id, validatedData);
       res.json(militar);
@@ -246,9 +568,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/militares/:id', isAuthenticated, requirePermission("militares", "delete"), async (req, res) => {
+  app.delete('/api/militares/:id', isAuthenticated, requirePermission("militares", "delete"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const id = parseInt(req.params.id);
+      const existing = await storage.getMilitaryPersonnelById(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Military personnel not found" });
+      }
+
+      if (!canManageMilitaryRecord(actor, existing.companhia, "delete")) {
+        return res.status(403).json({ message: "Você só pode excluir militares da sua companhia" });
+      }
+
       await storage.deleteMilitaryPersonnel(id);
       res.status(204).send();
     } catch (error) {
@@ -421,7 +757,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Custom Field Definitions routes (Admin only)
-  app.get('/api/custom-fields', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.get('/api/custom-fields', isAuthenticated, requirePermission("militares", "view"), async (_req, res) => {
     try {
       const fields = await storage.getAllCustomFieldDefinitions();
       res.json(fields);
@@ -431,8 +767,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/custom-fields/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.get('/api/custom-fields/:id', isAuthenticated, requirePermission("militares", "view"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode acessar este recurso" });
+      }
       const field = await storage.getCustomFieldDefinitionById(req.params.id);
       if (!field) {
         return res.status(404).json({ message: "Custom field not found" });
@@ -444,8 +784,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/custom-fields', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.post('/api/custom-fields', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode gerenciar colunas customizadas" });
+      }
       const validatedData = insertCustomFieldDefinitionSchema.parse(req.body);
       const field = await storage.createCustomFieldDefinition(validatedData);
       res.status(201).json(field);
@@ -459,8 +803,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/custom-fields/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.patch('/api/custom-fields/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode gerenciar colunas customizadas" });
+      }
       const existing = await storage.getCustomFieldDefinitionById(req.params.id);
       if (!existing) {
         return res.status(404).json({ message: "Custom field not found" });
@@ -479,8 +827,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/custom-fields/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req, res) => {
+  app.delete('/api/custom-fields/:id', isAuthenticated, requirePermission("usuarios", "manage"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode gerenciar colunas customizadas" });
+      }
       const existing = await storage.getCustomFieldDefinitionById(req.params.id);
       if (!existing) {
         return res.status(404).json({ message: "Custom field not found" });
@@ -540,8 +892,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Import from Google Sheets or Excel file (Admin only)
-  app.post('/api/import/google-sheets', isAuthenticated, requirePermission("importar", "import"), async (req, res) => {
+  app.post('/api/import/google-sheets', isAuthenticated, requirePermission("importar", "import"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode importar dados" });
+      }
       const { spreadsheetUrl, sheetName } = req.body;
 
       if (!spreadsheetUrl) {
@@ -574,6 +930,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Import by direct file upload (CSV or XLSX) - Admin only
   app.post('/api/import/upload', isAuthenticated, requirePermission("importar", "import"), upload.single('file'), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode importar dados" });
+      }
       if (!req.file || !req.file.buffer) {
         return res.status(400).json({ message: 'No file uploaded. Expect field "file" with CSV/XLSX.' });
       }
@@ -592,6 +952,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Import from a local file path on server (CSV or XLSX) - Admin only
   app.post('/api/import/local-file', isAuthenticated, requirePermission("importar", "import"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor || !buildAccessContext(actor).isGlobalAdmin) {
+        return res.status(403).json({ message: "Apenas o administrador global pode importar dados" });
+      }
       const { filePath, fileName } = req.body || {};
       const baseDir = process.cwd();
 
@@ -622,8 +986,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Export routes (authenticated users only)
-  app.get('/api/export/excel', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
+  app.get('/api/export/excel', isAuthenticated, requirePermission("relatorios", "export"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { filter_id, filter_tree, search } = req.query;
 
       // Handle multi-value filters (arrays)
@@ -691,6 +1060,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         militares = await storage.getAllMilitaryPersonnel();
       }
 
+      if (!hasGlobalPermission(actor, "relatorios", "export")) {
+        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia));
+      }
+
       // Log de confirmação do total de registros
       console.log(`[EXPORT EXCEL] Exportando ${militares.length} militares`);
 
@@ -715,8 +1088,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/export/pdf', isAuthenticated, requirePermission("relatorios", "export"), async (req, res) => {
+  app.get('/api/export/pdf', isAuthenticated, requirePermission("relatorios", "export"), async (req: any, res) => {
     try {
+      const actor = await getActor(req);
+      if (!actor) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const { filter_id, filter_tree, search } = req.query;
 
       // Handle multi-value filters (arrays)
@@ -780,6 +1158,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Sem filtros: retorna todos
       else {
         militares = await storage.getAllMilitaryPersonnel();
+      }
+
+      if (!hasGlobalPermission(actor, "relatorios", "export")) {
+        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia));
       }
 
       // Log de confirmação do total de registros

@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -13,6 +14,7 @@ import { LogOut, Loader2 } from "lucide-react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "@/lib/firebase";
+import { AppErrorBoundary } from "@/components/app-error-boundary";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -48,7 +50,7 @@ function Router() {
   console.log("[ROUTER] User authenticated - showing app");
 
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+    <SidebarProvider style={sidebarStyle as CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -93,8 +95,10 @@ export default function App() {
         <TooltipProvider>
           <AuthProvider>
             <FilterProvider>
-              <Router />
-              <Toaster />
+              <AppErrorBoundary>
+                <Router />
+                <Toaster />
+              </AppErrorBoundary>
             </FilterProvider>
           </AuthProvider>
         </TooltipProvider>

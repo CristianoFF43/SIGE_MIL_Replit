@@ -101,9 +101,16 @@ const normalizeTempValue = (value?: string | null): string => {
 
 export default function Relatorios() {
   const { toast } = useToast();
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading: authLoading,
+    hasPermission,
+    canExportCompany,
+  } = useAuth();
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [metric, setMetric] = useState<DataMetric>("rank");
+  const canViewReports = hasPermission("relatorios", "view");
+  const canExportReports = hasPermission("relatorios", "export");
 
   // Filtros agora suportam arrays para multi-seleção
   const [filters, setFilters] = useState({
@@ -132,21 +139,22 @@ export default function Relatorios() {
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
+    } else if (!authLoading && !canViewReports) {
+      toast({
+        title: "Acesso negado",
+        description: "Você não tem permissão para acessar relatórios",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 800);
     }
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, authLoading, canViewReports, toast]);
 
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: ["/api/militares"],
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && canViewReports,
   });
-
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-muted-foreground">Carregando...</div>
-      </div>
-    );
-  }
 
   // Extrair opções únicas para os novos filtros
   const uniqueSecoes = Array.from(new Set(militares.map(m => m.secaoFracao).filter(Boolean))) as string[];
@@ -179,6 +187,8 @@ export default function Relatorios() {
     }
     return true;
   });
+
+  const exportPreviewMilitares = filteredMilitares.filter((militar) => canExportCompany(militar.companhia));
 
   // Preparar dados baseado na métrica selecionada
   const getChartDataForMetric = (selectedMetric: DataMetric) => {
@@ -334,6 +344,15 @@ export default function Relatorios() {
   };
 
   const handleExport = async (format: "excel" | "pdf") => {
+    if (!canExportReports) {
+      toast({
+        title: "Acesso negado",
+        description: "Seu perfil pode visualizar relatórios, mas não exportá-los.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Constrói query string com filtros
     const params = new URLSearchParams();
 
@@ -384,7 +403,7 @@ export default function Relatorios() {
 
       toast({
         title: "Exportação concluída",
-        description: `Arquivo ${filename} gerado com ${filteredMilitares.length} militar(es)`,
+        description: `Arquivo ${filename} gerado com ${exportPreviewMilitares.length} militar(es)`,
       });
     } catch (error: any) {
       toast({
@@ -426,6 +445,22 @@ export default function Relatorios() {
     setSelectedColumns([]);
   };
 
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-muted-foreground">Carregando...</div>
+      </div>
+    );
+  }
+
+  if (!canViewReports) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-muted-foreground">Acesso restrito</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -450,7 +485,7 @@ export default function Relatorios() {
           </div>
           <CardDescription>
             Aplique filtros para refinar os dados antes de exportar.
-            <strong className="text-foreground"> {filteredMilitares.length} militar(es) selecionado(s)</strong>
+            <strong className="text-foreground"> {exportPreviewMilitares.length} militar(es) apto(s) para exportação</strong>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -581,13 +616,13 @@ export default function Relatorios() {
           <div className="text-center space-y-2">
             <div className="text-sm text-muted-foreground">Total que será exportado:</div>
             <div className="text-5xl font-bold text-primary" data-testid="text-export-total">
-              {filteredMilitares.length}
+              {exportPreviewMilitares.length}
             </div>
             <div className="text-sm font-medium mt-2">
               {hasFilters ? (
-                <span className="text-amber-600">⚠️ Filtros ativos - exportando dados filtrados</span>
+                <span className="text-amber-600">Filtros ativos - exportando apenas os registros permitidos pelo seu perfil</span>
               ) : (
-                <span className="text-green-600">✓ Sem filtros - exportando TODOS os {militares.length} militares</span>
+                <span className="text-green-600">Sem filtros - exportando {exportPreviewMilitares.length} militar(es) dentro do seu escopo</span>
               )}
             </div>
           </div>
@@ -615,10 +650,10 @@ export default function Relatorios() {
               className="w-full"
               onClick={() => handleExport("excel")}
               data-testid="button-export-excel"
-              disabled={selectedColumns.length === 0}
+              disabled={selectedColumns.length === 0 || !canExportReports}
             >
               <Download className="h-4 w-4 mr-2" />
-              Exportar {filteredMilitares.length} Militar(es) em Excel
+              Exportar {exportPreviewMilitares.length} Militar(es) em Excel
             </Button>
           </CardContent>
         </Card>
@@ -642,10 +677,10 @@ export default function Relatorios() {
               className="w-full"
               onClick={() => handleExport("pdf")}
               data-testid="button-export-pdf"
-              disabled={selectedColumns.length === 0}
+              disabled={selectedColumns.length === 0 || !canExportReports}
             >
               <Download className="h-4 w-4 mr-2" />
-              Exportar {filteredMilitares.length} Militar(es) em PDF
+              Exportar {exportPreviewMilitares.length} Militar(es) em PDF
             </Button>
           </CardContent>
         </Card>
