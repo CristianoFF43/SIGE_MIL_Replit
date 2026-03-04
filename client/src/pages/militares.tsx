@@ -5,6 +5,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  invalidateMilitaryQueries,
+  isMilitaryQueryKey,
+  MILITARY_QUERY_PREFIX,
+  militaryQuerySyncOptions,
+  notifyMilitaryDataChanged,
+  useMilitaryDataSync,
+} from "@/lib/militarySync";
 import { useFilterContext } from "@/hooks/useFilterContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,8 +81,6 @@ function getRankOrder(rank: string): number {
   return index === -1 ? 999 : index; // Postos não reconhecidos vão para o final
 }
 
-const MILITARES_QUERY_PREFIX = "/api/militares";
-
 function isBlankValue(value: string | number | null | undefined): boolean {
   return value === null || value === undefined || String(value).trim() === "";
 }
@@ -86,11 +92,6 @@ function renderPlainValue(value: string | number | null | undefined): ReactNode 
 
   return value;
 }
-
-function isMilitaresQueryKey(queryKey: readonly unknown[]): boolean {
-  return typeof queryKey[0] === "string" && queryKey[0].startsWith(MILITARES_QUERY_PREFIX);
-}
-
 // Componente de célula editável
 function EditableCell({
   value,
@@ -256,6 +257,7 @@ export default function Militares() {
     canManageCompany,
   } = useAuth();
   const { filterTree, setFilterTree, clearFilter } = useFilterContext();
+  useMilitaryDataSync(isAuthenticated);
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
   const viewMode = searchParams.get("view");
@@ -337,14 +339,15 @@ export default function Militares() {
   const militaresQueryUrl = useMemo(
     () =>
       mergedFilterTree
-        ? `${MILITARES_QUERY_PREFIX}?filter_tree=${encodeURIComponent(JSON.stringify(mergedFilterTree))}`
-        : MILITARES_QUERY_PREFIX,
+        ? `${MILITARY_QUERY_PREFIX}?filter_tree=${encodeURIComponent(JSON.stringify(mergedFilterTree))}`
+        : MILITARY_QUERY_PREFIX,
     [mergedFilterTree],
   );
 
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: [militaresQueryUrl],
     enabled: isAuthenticated,
+    ...militaryQuerySyncOptions,
   });
 
   const { data: customFields = [] } = useQuery<CustomFieldDefinition[]>({
@@ -356,7 +359,7 @@ export default function Militares() {
     (updater: (current: MilitaryPersonnel[]) => MilitaryPersonnel[]) => {
       queryClient.setQueriesData<MilitaryPersonnel[]>(
         {
-          predicate: (query) => isMilitaresQueryKey(query.queryKey),
+          predicate: (query) => isMilitaryQueryKey(query.queryKey),
         },
         (current) => (current ? updater(current) : current),
       );
@@ -364,11 +367,7 @@ export default function Militares() {
     [],
   );
 
-  const invalidateMilitaresQueries = useCallback(() => {
-    queryClient.invalidateQueries({
-      predicate: (query) => isMilitaresQueryKey(query.queryKey),
-    });
-  }, []);
+  const invalidateMilitaresQueries = useCallback(() => invalidateMilitaryQueries(), []);
 
   // Mutation para atualizar militar
   const updateMutation = useMutation({
@@ -378,11 +377,11 @@ export default function Militares() {
     },
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({
-        predicate: (query) => isMilitaresQueryKey(query.queryKey),
+        predicate: (query) => isMilitaryQueryKey(query.queryKey),
       });
 
       const previousQueries = queryClient.getQueriesData<MilitaryPersonnel[]>({
-        predicate: (query) => isMilitaresQueryKey(query.queryKey),
+        predicate: (query) => isMilitaryQueryKey(query.queryKey),
       });
 
       updateMilitaresCaches((current) =>
@@ -403,6 +402,7 @@ export default function Militares() {
         current.map((militar) => (militar.id === updatedMilitar.id ? updatedMilitar : militar)),
       );
       invalidateMilitaresQueries();
+      notifyMilitaryDataChanged();
       setSavingCell(null);
       toast({
         title: "Sucesso",
@@ -444,6 +444,7 @@ export default function Militares() {
     },
     onSuccess: () => {
       invalidateMilitaresQueries();
+      notifyMilitaryDataChanged();
       toast({
         title: "Sucesso",
         description: "Militar adicionado com sucesso",
@@ -475,6 +476,7 @@ export default function Militares() {
     },
     onSuccess: () => {
       invalidateMilitaresQueries();
+      notifyMilitaryDataChanged();
       toast({
         title: "Sucesso",
         description: "Militar removido com sucesso",

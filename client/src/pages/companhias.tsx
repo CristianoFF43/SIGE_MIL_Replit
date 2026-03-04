@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { militaryQuerySyncOptions, useMilitaryDataSync } from "@/lib/militarySync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,6 +182,7 @@ export default function Companhias() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const queryClient = useQueryClient();
+  useMilitaryDataSync(isAuthenticated);
 
   const [companies, setCompanies] = useState<CompanyData[]>([]);
 
@@ -207,6 +209,7 @@ export default function Companhias() {
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: ["/api/militares"],
     enabled: isAuthenticated,
+    ...militaryQuerySyncOptions,
   });
 
   // Fetch saved card order preference

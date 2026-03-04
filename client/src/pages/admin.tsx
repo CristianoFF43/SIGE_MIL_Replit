@@ -4,6 +4,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import {
+  invalidateMilitaryQueries,
+  militaryQuerySyncOptions,
+  notifyMilitaryDataChanged,
+  useMilitaryDataSync,
+} from "@/lib/militarySync";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +51,7 @@ import { getAccessMeta } from "@shared/accessControl";
 export default function Admin() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, hasPermission, isGlobalAdmin, assignedCompany } = useAuth();
+  useMilitaryDataSync(isAuthenticated);
   const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
   const [sheetName, setSheetName] = useState("Sheet1");
   const [file, setFile] = useState<File | null>(null);
@@ -88,6 +95,7 @@ export default function Admin() {
   const { data: militaryOptions = [], isLoading: militaryOptionsLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: ["/api/militares"],
     enabled: isAuthenticated && canManageUsers,
+    ...militaryQuerySyncOptions,
   });
 
   const updateRoleMutation = useMutation({
@@ -133,7 +141,8 @@ export default function Admin() {
         title: "Importação concluída!",
         description: `${data.total} militares importados com sucesso. ${data.skipped} linhas ignoradas.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+      invalidateMilitaryQueries();
+      notifyMilitaryDataChanged();
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       setSpreadsheetUrl("");
     },
@@ -178,7 +187,8 @@ export default function Admin() {
         title: "Importação por upload concluída!",
         description: `${data.total} registros importados. ${data.skipped} linhas ignoradas.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+      invalidateMilitaryQueries();
+      notifyMilitaryDataChanged();
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       setFile(null);
       // Reset input value to allow re-uploading same file if needed
@@ -214,7 +224,8 @@ export default function Admin() {
         title: "Importação de arquivo local concluída!",
         description: `${data.total} registros importados. ${data.skipped} linhas ignoradas.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/militares"] });
+      invalidateMilitaryQueries();
+      notifyMilitaryDataChanged();
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       setLocalFileName("");
     },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { militaryQuerySyncOptions, useMilitaryDataSync } from "@/lib/militarySync";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,6 +112,7 @@ export default function Relatorios() {
   const [metric, setMetric] = useState<DataMetric>("rank");
   const canViewReports = hasPermission("relatorios", "view");
   const canExportReports = hasPermission("relatorios", "export");
+  useMilitaryDataSync(isAuthenticated && canViewReports);
 
   // Filtros agora suportam arrays para multi-seleção
   const [filters, setFilters] = useState({
@@ -154,6 +156,7 @@ export default function Relatorios() {
   const { data: militares = [], isLoading } = useQuery<MilitaryPersonnel[]>({
     queryKey: ["/api/militares"],
     enabled: isAuthenticated && canViewReports,
+    ...militaryQuerySyncOptions,
   });
 
   // Extrair opções únicas para os novos filtros
