@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { militaryQuerySyncOptions, useMilitaryDataSync } from "@/lib/militarySync";
@@ -36,10 +36,9 @@ import {
   Cell,
 } from "recharts";
 import type { MilitaryPersonnel } from "@shared/schema";
-import { getRankCategory } from "@/lib/utils";
+import { buildFilterOptions } from "@/lib/filter-options";
 import { COMPANIES, RANKS, STATUSES, MISSIONS } from "@shared/schema";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type ChartType = "bar" | "pie" | "line" | "area" | "radar";
 type DataMetric = "company" | "rank" | "status" | "mission";
@@ -159,9 +158,34 @@ export default function Relatorios() {
     ...militaryQuerySyncOptions,
   });
 
-  // Extrair opções únicas para os novos filtros
-  const uniqueSecoes = Array.from(new Set(militares.map(m => m.secaoFracao).filter(Boolean))) as string[];
-  const uniqueFuncoes = Array.from(new Set(militares.map(m => m.funcao).filter(Boolean))) as string[];
+  const companyOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.companhia), COMPANIES),
+    [militares],
+  );
+  const rankOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.postoGraduacao), RANKS),
+    [militares],
+  );
+  const statusOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.situacao), STATUSES),
+    [militares],
+  );
+  const missionOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.missaoOp), MISSIONS),
+    [militares],
+  );
+  const secaoOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.secaoFracao)),
+    [militares],
+  );
+  const funcaoOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.funcao)),
+    [militares],
+  );
+  const tempOptions = useMemo(
+    () => buildFilterOptions(militares.map((m) => m.temp)),
+    [militares],
+  );
 
   // Aplica filtros localmente para preview
   const normalizedTempFilters = filters.temp
@@ -171,10 +195,18 @@ export default function Relatorios() {
   const filteredMilitares = militares.filter(militar => {
     if (filters.companhia.length > 0 && !filters.companhia.includes(militar.companhia)) return false;
     if (filters.posto.length > 0 && !filters.posto.includes(militar.postoGraduacao)) return false;
-    if (filters.situacao.length > 0 && militar.situacao && !filters.situacao.includes(militar.situacao)) return false;
-    if (filters.missaoOp.length > 0 && militar.missaoOp && !filters.missaoOp.includes(militar.missaoOp)) return false;
-    if (filters.secaoFracao.length > 0 && militar.secaoFracao && !filters.secaoFracao.includes(militar.secaoFracao)) return false;
-    if (filters.funcao.length > 0 && militar.funcao && !filters.funcao.includes(militar.funcao)) return false;
+    if (filters.situacao.length > 0) {
+      if (!militar.situacao || !filters.situacao.includes(militar.situacao)) return false;
+    }
+    if (filters.missaoOp.length > 0) {
+      if (!militar.missaoOp || !filters.missaoOp.includes(militar.missaoOp)) return false;
+    }
+    if (filters.secaoFracao.length > 0) {
+      if (!militar.secaoFracao || !filters.secaoFracao.includes(militar.secaoFracao)) return false;
+    }
+    if (filters.funcao.length > 0) {
+      if (!militar.funcao || !filters.funcao.includes(militar.funcao)) return false;
+    }
     if (normalizedTempFilters.length > 0) {
       const normalizedTemp = normalizeTempValue(militar.temp);
       if (!normalizedTemp || !normalizedTempFilters.includes(normalizedTemp)) return false;
@@ -496,7 +528,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Companhia</label>
               <MultiSelect
-                options={COMPANIES.map(c => ({ label: c, value: c }))}
+                options={companyOptions}
                 selected={filters.companhia}
                 onChange={(val) => setFilters({ ...filters, companhia: val })}
                 placeholder="Selecione companhias..."
@@ -506,7 +538,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Posto/Graduação</label>
               <MultiSelect
-                options={RANKS.map(r => ({ label: r, value: r }))}
+                options={rankOptions}
                 selected={filters.posto}
                 onChange={(val) => setFilters({ ...filters, posto: val })}
                 placeholder="Selecione postos..."
@@ -516,7 +548,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Situação</label>
               <MultiSelect
-                options={STATUSES.map(s => ({ label: s, value: s }))}
+                options={statusOptions}
                 selected={filters.situacao}
                 onChange={(val) => setFilters({ ...filters, situacao: val })}
                 placeholder="Selecione situações..."
@@ -526,7 +558,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Missão</label>
               <MultiSelect
-                options={MISSIONS.map(m => ({ label: m, value: m }))}
+                options={missionOptions}
                 selected={filters.missaoOp}
                 onChange={(val) => setFilters({ ...filters, missaoOp: val })}
                 placeholder="Selecione missões..."
@@ -536,7 +568,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Seção/Fração</label>
               <MultiSelect
-                options={uniqueSecoes.map(s => ({ label: s, value: s }))}
+                options={secaoOptions}
                 selected={filters.secaoFracao}
                 onChange={(val) => setFilters({ ...filters, secaoFracao: val })}
                 placeholder="Selecione seções..."
@@ -546,7 +578,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Função</label>
               <MultiSelect
-                options={uniqueFuncoes.map(f => ({ label: f, value: f }))}
+                options={funcaoOptions}
                 selected={filters.funcao}
                 onChange={(val) => setFilters({ ...filters, funcao: val })}
                 placeholder="Selecione funções..."
@@ -556,7 +588,7 @@ export default function Relatorios() {
             <div className="space-y-2">
               <label className="text-sm font-medium">TEMP</label>
               <MultiSelect
-                options={[{ label: "SIM", value: "SIM" }, { label: "NÃO", value: "NÃO" }]}
+                options={tempOptions}
                 selected={filters.temp}
                 onChange={(val) => setFilters({ ...filters, temp: val })}
                 placeholder="Selecione TEMP..."

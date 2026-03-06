@@ -87,6 +87,7 @@ interface FilterBuilderProps {
   value: FilterTree | null;
   onChange: (tree: FilterTree) => void;
   onClose?: () => void;
+  valueOptions?: Record<string, string[]>;
 }
 
 function MultiSelectValue({
@@ -163,13 +164,16 @@ function ConditionRow({
   onChange,
   onDelete,
   fieldOptions,
+  valueOptions,
 }: {
   condition: FilterCondition;
   onChange: (c: FilterCondition) => void;
   onDelete: () => void;
   fieldOptions: Array<{ value: string; label: string }>;
+  valueOptions?: Record<string, string[]>;
 }) {
-  const fieldValueOptions = FIELD_VALUES[condition.field];
+  const fieldKey = condition.field as string;
+  const fieldValueOptions = valueOptions?.[fieldKey] ?? FIELD_VALUES[fieldKey];
   const supportsMultiple = ["IN", "NOT IN"].includes(condition.comparator);
 
   return (
@@ -255,12 +259,14 @@ function GroupBuilder({
   onDelete,
   depth = 0,
   fieldOptions,
+  valueOptions,
 }: {
   group: InternalFilterGroup;
   onChange: (g: InternalFilterGroup) => void;
   onDelete?: () => void;
   depth?: number;
   fieldOptions: Array<{ value: string; label: string }>;
+  valueOptions?: Record<string, string[]>;
 }) {
   const addCondition = () => {
     onChange({
@@ -342,6 +348,7 @@ function GroupBuilder({
             onChange={(c) => updateCondition(index, c)}
             onDelete={() => deleteCondition(index)}
             fieldOptions={fieldOptions}
+            valueOptions={valueOptions}
           />
         ))}
       </div>
@@ -355,6 +362,7 @@ function GroupBuilder({
             onDelete={() => deleteGroup(index)}
             depth={depth + 1}
             fieldOptions={fieldOptions}
+            valueOptions={valueOptions}
           />
         ))}
       </div>
@@ -373,7 +381,7 @@ function GroupBuilder({
   );
 }
 
-export function FilterBuilder({ value, onChange, onClose }: FilterBuilderProps) {
+export function FilterBuilder({ value, onChange, onClose, valueOptions }: FilterBuilderProps) {
   const { isAuthenticated } = useAuth();
   
   const { data: customFields = [] } = useQuery<CustomFieldDefinition[]>({
@@ -420,7 +428,12 @@ export function FilterBuilder({ value, onChange, onClose }: FilterBuilderProps) 
         )}
       </div>
 
-      <GroupBuilder group={localTree} onChange={setLocalTree} fieldOptions={FIELD_OPTIONS} />
+      <GroupBuilder
+        group={localTree}
+        onChange={setLocalTree}
+        fieldOptions={FIELD_OPTIONS}
+        valueOptions={valueOptions}
+      />
 
       <div className="flex gap-2 pt-2">
         <Button onClick={handleApply} data-testid="button-apply-filter">

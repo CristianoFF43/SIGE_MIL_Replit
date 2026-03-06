@@ -51,6 +51,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCPF, formatPhone, getStatusVariant } from "@/lib/utils";
+import { buildFilterOptions, buildFilterOptionValues } from "@/lib/filter-options";
 import { COMPANIES, RANKS, STATUSES } from "@shared/schema";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
 
@@ -349,6 +350,27 @@ export default function Militares() {
     enabled: isAuthenticated,
     ...militaryQuerySyncOptions,
   });
+
+  const companyOptions = useMemo(
+    () => buildFilterOptions(militares.map((militar) => militar.companhia), COMPANIES),
+    [militares],
+  );
+  const rankOptions = useMemo(
+    () => buildFilterOptions(militares.map((militar) => militar.postoGraduacao), RANKS),
+    [militares],
+  );
+  const statusOptions = useMemo(
+    () => buildFilterOptions(militares.map((militar) => militar.situacao), STATUSES),
+    [militares],
+  );
+  const filterValueOptions = useMemo(
+    () => ({
+      companhia: buildFilterOptionValues(militares.map((militar) => militar.companhia), COMPANIES),
+      postoGraduacao: buildFilterOptionValues(militares.map((militar) => militar.postoGraduacao), RANKS),
+      situacao: buildFilterOptionValues(militares.map((militar) => militar.situacao), STATUSES),
+    }),
+    [militares],
+  );
 
   const { data: customFields = [] } = useQuery<CustomFieldDefinition[]>({
     queryKey: ["/api/custom-fields"],
@@ -699,9 +721,9 @@ export default function Militares() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            {COMPANIES.map((company) => (
-              <SelectItem key={company} value={company}>
-                {company}
+            {companyOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -713,9 +735,9 @@ export default function Militares() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            {RANKS.map((rank) => (
-              <SelectItem key={rank} value={rank}>
-                {rank}
+            {rankOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -727,9 +749,9 @@ export default function Militares() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            {STATUSES.map((status) => (
-              <SelectItem key={status} value={status}>
-                {status}
+            {statusOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -759,6 +781,7 @@ export default function Militares() {
                     setAdvancedFilterOpen(false);
                   }}
                   onClose={() => setAdvancedFilterOpen(false)}
+                  valueOptions={filterValueOptions}
                 />
               </div>
             </SheetContent>
