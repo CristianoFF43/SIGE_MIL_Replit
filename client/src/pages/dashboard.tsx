@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { militaryQuerySyncOptions, useMilitaryDataSync } from "@/lib/militarySync";
 import { StatsCard } from "@/components/stats-card";
 import { BootstrapAdmin } from "@/components/bootstrap-admin";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Building2, Shield, Activity, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar, Layers, CircleDot } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Building2, Shield, Target, UserX, HelpCircle, GripVertical, RotateCcw, BarChart3, PieChart as PieChartIcon, TrendingUp, Circle, Radar, Layers, CircleDot, type LucideIcon } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -45,14 +47,24 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-
-interface DashboardStats {
-  total: number;
-  byCompany: Record<string, number>;
-  byRank: Record<string, number>;
-  byStatus: Record<string, number>;
-  byMission: Record<string, number>;
-}
+import type { MilitaryPersonnel, UserPreference } from "@shared/schema";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface AvailableField {
   name: string;
@@ -125,25 +137,107 @@ function getRankOrder(rank: string): number {
   return index === -1 ? 999 : index; // Postos não reconhecidos vão para o final
 }
 
+const DASHBOARD_MINICARDS_PREFERENCE_KEY = "dashboard_minicards_order";
+
+interface DashboardMiniCard {
+  id: string;
+  title: string;
+  value: number;
+  icon: LucideIcon;
+  description: string;
+}
+
+interface SortableMiniCardProps {
+  card: DashboardMiniCard;
+}
+
+function normalizeText(value?: string | null): string {
+  return value?.trim().toLocaleLowerCase("pt-BR") ?? "";
+}
+
+function trimText(value?: string | null): string {
+  return value?.trim() ?? "";
+}
+
+function isProntoSituation(value?: string | null): boolean {
+  return normalizeText(value) === "pronto";
+}
+
+function parsePreferenceOrder(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function mergeCardOrder(baseOrder: string[], defaultOrder: string[]): string[] {
+  const uniqueBase = Array.from(new Set(baseOrder)).filter((id) => defaultOrder.includes(id));
+  const missing = defaultOrder.filter((id) => !uniqueBase.includes(id));
+  return [...uniqueBase, ...missing];
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
+function SortableMiniCard({ card }: SortableMiniCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.55 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      <div className="absolute right-2 top-2 z-10">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded hover:bg-accent/70"
+          aria-label={`Arrastar card ${card.title}`}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </div>
+      <StatsCard
+        title={card.title}
+        value={card.value}
+        icon={card.icon}
+        description={card.description}
+      />
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, user, isGlobalAdmin, isLocalAdmin, isLocalManager } = useAuth();
+  const queryClient = useQueryClient();
+  useMilitaryDataSync(isAuthenticated);
 
-  // Estado para seleção de gráficos
-  const [chartType1, setChartType1] = useState<ChartType>("bar");
-  const [chartType2, setChartType2] = useState<ChartType>("pie");
   const [chartType3, setChartType3] = useState<ChartType>("bar");
-  const [metric1, setMetric1] = useState<string>("companhia");
-  const [metric2, setMetric2] = useState<string>("situacao");
   const [metric3, setMetric3] = useState<string>("postoGraduacao");
 
-  // Estado para modo de comparação
-  const [compareMode1, setCompareMode1] = useState(false);
-  const [compareMode2, setCompareMode2] = useState(false);
   const [compareMode3, setCompareMode3] = useState(false);
-  const [metric1Compare, setMetric1Compare] = useState<string>("situacao");
-  const [metric2Compare, setMetric2Compare] = useState<string>("companhia");
   const [metric3Compare, setMetric3Compare] = useState<string>("missaoOp");
+  const [miniCardOrder, setMiniCardOrder] = useState<string[]>([]);
+  const [hasCustomOrder, setHasCustomOrder] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -158,53 +252,195 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, authLoading, toast]);
 
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/stats"],
+  const { data: militares = [], isLoading: isMilitaresLoading } = useQuery<MilitaryPersonnel[]>({
+    queryKey: ["/api/militares"],
     enabled: isAuthenticated,
+    ...militaryQuerySyncOptions,
   });
 
   // Buscar campos disponíveis
-  const { data: availableFields } = useQuery<{ all: AvailableField[] }>({
+  const { data: availableFields, isLoading: isFieldsLoading } = useQuery<{ all: AvailableField[] }>({
     queryKey: ["/api/stats/fields"],
     enabled: isAuthenticated,
   });
 
-  // Buscar dados dinâmicos para cada métrica
-  const { data: data1Response } = useQuery<DynamicStatsResponse>({
-    queryKey: ["/api/stats/dynamic", metric1],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric1)}`);
-      return res.json();
-    },
-    enabled: isAuthenticated && !!metric1,
+  const { data: savedPreference } = useQuery<UserPreference>({
+    queryKey: [`/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`],
+    enabled: isAuthenticated && !!user,
   });
 
-  const { data: data1CrossResponse } = useQuery<CrossStatsResponse>({
-    queryKey: ["/api/stats/cross", metric1, metric1Compare],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/cross?fieldX=${encodeURIComponent(metric1)}&fieldY=${encodeURIComponent(metric1Compare)}`);
-      return res.json();
+  const savePreferenceMutation = useMutation({
+    mutationFn: async (cardOrder: string[]) => {
+      const response = await apiRequest("PUT", `/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`, {
+        preferenceValue: cardOrder,
+      });
+      return response.json();
     },
-    enabled: isAuthenticated && compareMode1 && !!metric1 && !!metric1Compare,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`] });
+    },
   });
 
-  const { data: data2Response } = useQuery<DynamicStatsResponse>({
-    queryKey: ["/api/stats/dynamic", metric2],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/dynamic?field=${encodeURIComponent(metric2)}`);
-      return res.json();
+  const resetPreferenceMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`);
     },
-    enabled: isAuthenticated && !!metric2,
+    onSuccess: () => {
+      queryClient.setQueryData([`/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`], null);
+      queryClient.invalidateQueries({ queryKey: [`/api/preferences/${DASHBOARD_MINICARDS_PREFERENCE_KEY}`] });
+      toast({
+        title: "Layout redefinido",
+        description: "A ordem dos minicards foi restaurada ao padrão.",
+      });
+    },
   });
 
-  const { data: data2CrossResponse } = useQuery<CrossStatsResponse>({
-    queryKey: ["/api/stats/cross", metric2, metric2Compare],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stats/cross?fieldX=${encodeURIComponent(metric2)}&fieldY=${encodeURIComponent(metric2Compare)}`);
-      return res.json();
-    },
-    enabled: isAuthenticated && compareMode2 && !!metric2 && !!metric2Compare,
-  });
+  const defaultMiniCards = useMemo<DashboardMiniCard[]>(() => {
+    const totalMilitares = militares.length;
+    const companhias = new Set<string>();
+    let prontos = 0;
+    let semDestino = 0;
+    const missaoMap = new Map<string, { label: string; count: number }>();
+
+    militares.forEach((militar) => {
+      const companhia = trimText(militar.companhia);
+      const situacao = trimText(militar.situacao);
+      const missao = trimText(militar.missaoOp);
+
+      if (companhia) {
+        companhias.add(companhia);
+      }
+
+      if (isProntoSituation(situacao)) {
+        prontos += 1;
+      }
+
+      if (missao) {
+        const missaoKey = normalizeText(missao);
+        const current = missaoMap.get(missaoKey);
+        if (current) {
+          current.count += 1;
+        } else {
+          missaoMap.set(missaoKey, { label: missao, count: 1 });
+        }
+      }
+
+      if (!situacao && !missao) {
+        semDestino += 1;
+      }
+    });
+
+    const missaoCards = Array.from(missaoMap.entries())
+      .sort(([, a], [, b]) => a.label.localeCompare(b.label, "pt-BR"))
+      .map(([missaoKey, missao]) => ({
+        id: `missao:${encodeURIComponent(missaoKey)}`,
+        title: missao.label,
+        value: missao.count,
+        icon: Target,
+        description: "Militares nessa missão",
+      }));
+
+    const cards: DashboardMiniCard[] = [
+      {
+        id: "total",
+        title: "Todos os Militares",
+        value: totalMilitares,
+        icon: Users,
+        description: "Efetivo total cadastrado",
+      },
+      {
+        id: "companhias",
+        title: "Companhias",
+        value: companhias.size,
+        icon: Building2,
+        description: "Companhias com efetivo",
+      },
+      {
+        id: "prontos",
+        title: "Prontos",
+        value: prontos,
+        icon: Shield,
+        description: "Situação igual a Pronto",
+      },
+      {
+        id: "nao-prontos",
+        title: "Não Prontos",
+        value: totalMilitares - prontos,
+        icon: UserX,
+        description: "Situação diferente de Pronto",
+      },
+      ...missaoCards,
+    ];
+
+    if (semDestino > 0) {
+      cards.push({
+        id: "sem-destino",
+        title: "Sem Destino",
+        value: semDestino,
+        icon: HelpCircle,
+        description: "Sem Situação e sem Missão",
+      });
+    }
+
+    return cards;
+  }, [militares]);
+
+  const defaultMiniCardOrder = useMemo(
+    () => defaultMiniCards.map((card) => card.id),
+    [defaultMiniCards],
+  );
+
+  useEffect(() => {
+    if (defaultMiniCardOrder.length === 0) {
+      setMiniCardOrder([]);
+      return;
+    }
+
+    const savedOrder = parsePreferenceOrder(savedPreference?.preferenceValue);
+    setMiniCardOrder((currentOrder) => {
+      const source = hasCustomOrder
+        ? currentOrder
+        : (savedOrder.length > 0 ? savedOrder : currentOrder);
+      const mergedOrder = mergeCardOrder(source, defaultMiniCardOrder);
+      return arraysEqual(currentOrder, mergedOrder) ? currentOrder : mergedOrder;
+    });
+  }, [defaultMiniCardOrder, savedPreference, hasCustomOrder]);
+
+  const orderedMiniCards = useMemo(() => {
+    if (miniCardOrder.length === 0) {
+      return defaultMiniCards;
+    }
+
+    const cardMap = new Map(defaultMiniCards.map((card) => [card.id, card]));
+    return miniCardOrder
+      .map((cardId) => cardMap.get(cardId))
+      .filter((card): card is DashboardMiniCard => !!card);
+  }, [defaultMiniCards, miniCardOrder]);
+
+  const handleMiniCardDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setHasCustomOrder(true);
+    setMiniCardOrder((currentOrder) => {
+      const oldIndex = currentOrder.findIndex((cardId) => cardId === active.id);
+      const newIndex = currentOrder.findIndex((cardId) => cardId === over.id);
+      if (oldIndex === -1 || newIndex === -1) return currentOrder;
+
+      const reordered = arrayMove(currentOrder, oldIndex, newIndex);
+      savePreferenceMutation.mutate(reordered);
+      return reordered;
+    });
+  };
+
+  const handleResetMiniCards = () => {
+    setMiniCardOrder(defaultMiniCardOrder);
+    resetPreferenceMutation.mutate(undefined, {
+      onSuccess: () => {
+        setHasCustomOrder(false);
+      },
+    });
+  };
 
   const { data: data3Response } = useQuery<DynamicStatsResponse>({
     queryKey: ["/api/stats/dynamic", metric3],
@@ -224,7 +460,7 @@ export default function Dashboard() {
     enabled: isAuthenticated && compareMode3 && !!metric3 && !!metric3Compare,
   });
 
-  if (authLoading || isLoading) {
+  if (authLoading || isMilitaresLoading || isFieldsLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted-foreground">Carregando...</div>
@@ -628,13 +864,9 @@ export default function Dashboard() {
     }
   };
 
-  // Preparar dados para os gráficos
-  const data1 = prepareChartData(data1Response, metric1);
-  const data2 = prepareChartData(data2Response, metric2);
+  // Preparar dados para o gráfico
   const data3 = prepareChartData(data3Response, metric3);
 
-  const cross1 = buildCrossDataset(data1CrossResponse, metric1, metric1Compare);
-  const cross2 = buildCrossDataset(data2CrossResponse, metric2, metric2Compare);
   const cross3 = buildCrossDataset(data3CrossResponse, metric3, metric3Compare);
 
   return (
@@ -648,224 +880,46 @@ export default function Dashboard() {
         <BootstrapAdmin />
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
-          title="Total de Militares"
-          value={stats?.total || 0}
-          icon={Users}
-          description="Efetivo total cadastrado"
-        />
-        <StatsCard
-          title="Companhias"
-          value={Object.keys(stats?.byCompany || {}).length}
-          icon={Building2}
-          description="Unidades operacionais"
-        />
-        <StatsCard
-          title="Prontos"
-          value={stats?.byStatus?.["Pronto"] || 0}
-          icon={Shield}
-          description="Militares em prontidão"
-        />
-        <StatsCard
-          title="Em Missão"
-          value={stats?.byMission?.["FORPRON"] || 0}
-          icon={Activity}
-          description="Destacados FORPRON"
-        />
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Arraste os minicards para reorganizar a visualização.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleResetMiniCards}
+            disabled={resetPreferenceMutation.isPending}
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Restaurar ordem padrão
+          </Button>
+        </div>
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleMiniCardDragEnd}
+        >
+          <SortableContext
+            items={orderedMiniCards.map((card) => card.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {orderedMiniCards.map((card) => (
+                <SortableMiniCard key={card.id} card={card} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       </div>
 
-      {/* Gráficos Interativos */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Gráfico 1 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <CardTitle>Gráfico 1: {getFieldLabel(metric1)}</CardTitle>
-                <CardDescription>Escolha o tipo de visualização, métrica e modo de comparação</CardDescription>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 pt-4">
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">Tipo de Gráfico</label>
-                <Tabs value={chartType1} onValueChange={(v) => setChartType1(v as ChartType)}>
-                  <TabsList className="grid grid-cols-4 gap-1">
-                    {(["bar", "pie", "line", "area", "radar", "scatter", "composed", "radialBar"] as ChartType[]).map((type) => {
-                      const Icon = chartTypeIcons[type];
-                      return (
-                        <TabsTrigger key={type} value={type} title={type} data-testid={`chart1-type-${type}`} className="px-2">
-                          <Icon className="h-4 w-4" />
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">Dados a Exibir</label>
-                <Select value={metric1} onValueChange={setMetric1}>
-                  <SelectTrigger data-testid="chart1-metric-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableFields?.all?.map((field) => (
-                      <SelectItem key={field.name} value={field.name}>
-                        {field.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center gap-2 min-w-[180px]">
-                <Switch
-                  id="compare1"
-                  checked={compareMode1}
-                  onCheckedChange={setCompareMode1}
-                  data-testid="chart1-compare-switch"
-                />
-                <Label htmlFor="compare1" className="text-sm font-medium">Comparar com outra métrica</Label>
-              </div>
-
-              {compareMode1 && (
-                <div className="flex-1 min-w-[180px]">
-                  <label className="text-sm font-medium mb-2 block">2ª Métrica (Comparação)</label>
-                  <Select value={metric1Compare} onValueChange={setMetric1Compare}>
-                    <SelectTrigger data-testid="chart1-metric-compare-select">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableFields?.all?.map((field) => (
-                        <SelectItem key={field.name} value={field.name}>
-                          {field.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {data1.length > 0 ? (
-              renderChart(
-                chartType1,
-                data1,
-                350,
-                compareMode1 ? cross1.data : undefined,
-                getFieldLabel(metric1),
-                compareMode1 ? getFieldLabel(metric1Compare) : undefined,
-                compareMode1 ? cross1.keys : undefined
-              )
-            ) : (
-              <div className="h-[350px] flex items-center justify-center text-muted-foreground">
-                Sem dados disponíveis
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Gráfico 2 */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <CardTitle>Gráfico 2: {getFieldLabel(metric2)}</CardTitle>
-                <CardDescription>Escolha o tipo de visualização, métrica e modo de comparação</CardDescription>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 pt-4">
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">Tipo de Gráfico</label>
-                <Tabs value={chartType2} onValueChange={(v) => setChartType2(v as ChartType)}>
-                  <TabsList className="grid grid-cols-4 gap-1">
-                    {(["bar", "pie", "line", "area", "radar", "scatter", "composed", "radialBar"] as ChartType[]).map((type) => {
-                      const Icon = chartTypeIcons[type];
-                      return (
-                        <TabsTrigger key={type} value={type} title={type} data-testid={`chart2-type-${type}`} className="px-2">
-                          <Icon className="h-4 w-4" />
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                </Tabs>
-              </div>
-
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-sm font-medium mb-2 block">Dados a Exibir</label>
-                <Select value={metric2} onValueChange={setMetric2}>
-                  <SelectTrigger data-testid="chart2-metric-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableFields?.all?.map((field) => (
-                      <SelectItem key={field.name} value={field.name}>
-                        {field.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center gap-2 min-w-[180px]">
-                <Switch
-                  id="compare2"
-                  checked={compareMode2}
-                  onCheckedChange={setCompareMode2}
-                  data-testid="chart2-compare-switch"
-                />
-                <Label htmlFor="compare2" className="text-sm font-medium">Comparar com outra métrica</Label>
-              </div>
-
-              {compareMode2 && (
-                <div className="flex-1 min-w-[180px]">
-                  <label className="text-sm font-medium mb-2 block">2ª Métrica (Comparação)</label>
-                  <Select value={metric2Compare} onValueChange={setMetric2Compare}>
-                    <SelectTrigger data-testid="chart2-metric-compare-select">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableFields?.all?.map((field) => (
-                        <SelectItem key={field.name} value={field.name}>
-                          {field.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {data2.length > 0 ? (
-              renderChart(
-                chartType2,
-                data2,
-                350,
-                compareMode2 ? cross2.data : undefined,
-                getFieldLabel(metric2),
-                compareMode2 ? getFieldLabel(metric2Compare) : undefined,
-                compareMode2 ? cross2.keys : undefined
-              )
-            ) : (
-              <div className="h-[350px] flex items-center justify-center text-muted-foreground">
-                Sem dados disponíveis
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráfico 3 - Análise Detalhada */}
+      {/* Gráfico final */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <CardTitle>Gráfico 3: {getFieldLabel(metric3)}</CardTitle>
+              <CardTitle>Gráfico: {getFieldLabel(metric3)}</CardTitle>
               <CardDescription>Escolha o tipo de visualização, métrica e modo de comparação</CardDescription>
             </div>
           </div>
