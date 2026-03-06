@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useFirebaseAuth } from "@/contexts/AuthContext";
 import { DEFAULT_PERMISSIONS, type AccessRole, type Permission, type User } from "@shared/schema";
-import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isSameCompany } from "@shared/accessControl";
+import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isPefSection, isSameCompany, isSameSection } from "@shared/accessControl";
 
 type PermissionSection = Exclude<keyof Permission, "__meta">;
 
@@ -65,18 +65,30 @@ export function useAuth() {
   const canManageCompany = (
     company: string | null | undefined,
     action: "view" | "edit" | "create" | "delete",
+    section?: string | null,
   ): boolean => {
     if (!user) return false;
     if (action === "view") return hasPermission("militares", "view");
     if (hasGlobalPermission("militares", action)) return true;
     if (!localRole || !accessMeta.assignedCompany || !isSameCompany(accessMeta.assignedCompany, company)) return false;
+    const restrictToSection = isSameCompany(accessMeta.assignedCompany, "CEF") && isPefSection(accessMeta.assignedSection);
+    if (restrictToSection) {
+      if (!section) return false;
+      if (!isSameSection(accessMeta.assignedSection, section)) return false;
+    }
     return hasLocalPermission("militares", action);
   };
 
-  const canExportCompany = (company: string | null | undefined): boolean => {
+  const canExportCompany = (company: string | null | undefined, section?: string | null): boolean => {
     if (!user) return false;
     if (hasGlobalPermission("relatorios", "export")) return true;
-    return !!accessMeta.assignedCompany && isSameCompany(accessMeta.assignedCompany, company) && hasLocalPermission("relatorios", "export");
+    if (!accessMeta.assignedCompany || !isSameCompany(accessMeta.assignedCompany, company)) return false;
+    const restrictToSection = isSameCompany(accessMeta.assignedCompany, "CEF") && isPefSection(accessMeta.assignedSection);
+    if (restrictToSection) {
+      if (!section) return false;
+      if (!isSameSection(accessMeta.assignedSection, section)) return false;
+    }
+    return hasLocalPermission("relatorios", "export");
   };
 
   const roleLabel = user?.role === "administrator"

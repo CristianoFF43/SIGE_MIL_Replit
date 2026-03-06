@@ -212,6 +212,15 @@ export const COMPANIES = [
   "1ª CIA", "2ª CIA", "3ª CIA", "CEF", "CCAP", "B ADM", "EM", "SEDE"
 ] as const;
 
+export const PEF_SECTIONS = [
+  "1º PEF",
+  "2º PEF",
+  "3º PEF",
+  "4º PEF",
+  "5º PEF",
+  "6º PEF",
+] as const;
+
 export const STATUSES = [
   "Pronto", "Férias", "Licença", "Transferido", "Destacado",
   "À Disposição", "Apto recom.", "Preso Disp Jus", "Instalação",

@@ -1,5 +1,5 @@
 import { DEFAULT_PERMISSIONS, type AccessRole, type Permission, type User } from "@shared/schema";
-import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isS1Section, isSameCompany } from "@shared/accessControl";
+import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isPefSection, isS1Section, isSameCompany, isSameSection } from "@shared/accessControl";
 
 type PermissionSection = Exclude<keyof Permission, "__meta">;
 
@@ -74,6 +74,7 @@ export function canManageMilitaryRecord(
   user: User,
   company: string | null | undefined,
   action: "view" | "edit" | "create" | "delete",
+  section?: string | null,
 ): boolean {
   if (action === "view") {
     return hasEffectivePermission(user, "militares", "view");
@@ -92,16 +93,37 @@ export function canManageMilitaryRecord(
     return false;
   }
 
+  const restrictToSection = isSameCompany(context.assignedCompany, "CEF") && isPefSection(context.assignedSection);
+  if (restrictToSection) {
+    if (!section) {
+      return false;
+    }
+    if (!isSameSection(context.assignedSection, section)) {
+      return false;
+    }
+  }
+
   return hasLocalPermission(user, "militares", action);
 }
 
-export function canExportCompany(user: User, company: string | null | undefined): boolean {
+export function canExportCompany(user: User, company: string | null | undefined, section?: string | null): boolean {
   if (hasGlobalPermission(user, "relatorios", "export")) {
     return true;
   }
 
   const context = buildAccessContext(user);
-  return !!context.assignedCompany && isSameCompany(context.assignedCompany, company) && hasLocalPermission(user, "relatorios", "export");
+  if (!context.assignedCompany || !isSameCompany(context.assignedCompany, company)) {
+    return false;
+  }
+
+  const restrictToSection = isSameCompany(context.assignedCompany, "CEF") && isPefSection(context.assignedSection);
+  if (restrictToSection) {
+    if (!section || !isSameSection(context.assignedSection, section)) {
+      return false;
+    }
+  }
+
+  return hasLocalPermission(user, "relatorios", "export");
 }
 
 export function canViewUsersGlobally(user: User): boolean {

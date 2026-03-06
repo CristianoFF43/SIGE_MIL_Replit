@@ -521,7 +521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const validatedData = insertMilitaryPersonnelSchema.parse(req.body);
-      if (!canManageMilitaryRecord(actor, validatedData.companhia, "create")) {
+      if (!canManageMilitaryRecord(actor, validatedData.companhia, "create", validatedData.secaoFracao)) {
         return res.status(403).json({ message: "Você só pode criar militares dentro da sua companhia" });
       }
       const militar = await storage.createMilitaryPersonnel(validatedData);
@@ -552,7 +552,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const targetCompany = validatedData.companhia || existing.companhia;
-      if (!canManageMilitaryRecord(actor, existing.companhia, "edit") || !canManageMilitaryRecord(actor, targetCompany, "edit")) {
+      const targetSection = validatedData.secaoFracao ?? existing.secaoFracao ?? null;
+      if (!canManageMilitaryRecord(actor, existing.companhia, "edit", existing.secaoFracao) ||
+        !canManageMilitaryRecord(actor, targetCompany, "edit", targetSection)) {
         return res.status(403).json({ message: "Você só pode editar militares da sua companhia" });
       }
 
@@ -581,7 +583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Military personnel not found" });
       }
 
-      if (!canManageMilitaryRecord(actor, existing.companhia, "delete")) {
+      if (!canManageMilitaryRecord(actor, existing.companhia, "delete", existing.secaoFracao)) {
         return res.status(403).json({ message: "Você só pode excluir militares da sua companhia" });
       }
 
@@ -1061,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!hasGlobalPermission(actor, "relatorios", "export")) {
-        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia));
+        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia, militar.secaoFracao));
       }
 
       // Log de confirmação do total de registros
@@ -1161,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!hasGlobalPermission(actor, "relatorios", "export")) {
-        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia));
+        militares = militares.filter((militar) => canExportCompany(actor, militar.companhia, militar.secaoFracao));
       }
 
       // Log de confirmação do total de registros

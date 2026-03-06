@@ -52,7 +52,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatCPF, formatPhone, getStatusVariant } from "@/lib/utils";
 import { buildFilterOptions, buildFilterOptionValues } from "@/lib/filter-options";
-import { COMPANIES, RANKS, STATUSES } from "@shared/schema";
+import { COMPANIES, RANKS, STATUSES, PEF_SECTIONS } from "@shared/schema";
+import { isPefSection, isSameSection, normalizeAccessValue } from "@shared/accessControl";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
 
 // Ordenação hierárquica militar (do mais alto ao mais baixo)
@@ -264,6 +265,14 @@ export default function Militares() {
   const viewMode = searchParams.get("view");
   const presetCompany = viewMode === "cia" ? searchParams.get("companhia") : null;
   const isCefView = viewMode === "cef";
+  const selectedPef = useMemo(() => {
+    if (!isCefView) return null;
+    const pefParam = searchParams.get("pef");
+    if (!pefParam) return null;
+    const index = Number.parseInt(pefParam, 10);
+    if (!Number.isFinite(index) || index < 1 || index > PEF_SECTIONS.length) return null;
+    return PEF_SECTIONS[index - 1];
+  }, [isCefView, search]);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCompany, setFilterCompany] = useState<string>(() => presetCompany || "all");
   const [filterRank, setFilterRank] = useState<string>("all");
@@ -292,16 +301,7 @@ export default function Militares() {
     }
   }, [presetCompany, isCefView, search]);
 
-  const normalizeKey = (val?: string | null) => {
-    if (!val) return "";
-    return val
-      .toUpperCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^A-Z0-9]/g, "");
-  };
-
-  const cefSecoes = ["1º PEF", "2º PEF", "3º PEF", "4º PEF", "5º PEF", "6º PEF"];
+  const cefSecoes = [...PEF_SECTIONS];
 
   const baseFilterTree: FilterTree | null = filterTree;
   const presetFilterTree: FilterTree | null = (() => {
@@ -351,25 +351,49 @@ export default function Militares() {
     ...militaryQuerySyncOptions,
   });
 
+  const scopedMilitares = useMemo(() => {
+    if (!isCefView) return militares;
+
+    const normalizedSede = normalizeAccessValue("SEDE");
+    const normalizedCef = normalizeAccessValue("CEF");
+
+    if (selectedPef) {
+      return militares.filter((militar) => {
+        const company = normalizeAccessValue(militar.companhia);
+        if (company === normalizedSede) return false;
+        return isSameSection(militar.secaoFracao, selectedPef);
+      });
+    }
+
+    return militares.filter((militar) => {
+      const company = normalizeAccessValue(militar.companhia);
+      if (company === normalizedSede) return true;
+      if (company === normalizedCef) {
+        return !isPefSection(militar.secaoFracao);
+      }
+      return false;
+    });
+  }, [militares, isCefView, selectedPef]);
+
   const companyOptions = useMemo(
-    () => buildFilterOptions(militares.map((militar) => militar.companhia), COMPANIES),
-    [militares],
+    () => buildFilterOptions(scopedMilitares.map((militar) => militar.companhia), COMPANIES),
+    [scopedMilitares],
   );
   const rankOptions = useMemo(
-    () => buildFilterOptions(militares.map((militar) => militar.postoGraduacao), RANKS),
-    [militares],
+    () => buildFilterOptions(scopedMilitares.map((militar) => militar.postoGraduacao), RANKS),
+    [scopedMilitares],
   );
   const statusOptions = useMemo(
-    () => buildFilterOptions(militares.map((militar) => militar.situacao), STATUSES),
-    [militares],
+    () => buildFilterOptions(scopedMilitares.map((militar) => militar.situacao), STATUSES),
+    [scopedMilitares],
   );
   const filterValueOptions = useMemo(
     () => ({
-      companhia: buildFilterOptionValues(militares.map((militar) => militar.companhia), COMPANIES),
-      postoGraduacao: buildFilterOptionValues(militares.map((militar) => militar.postoGraduacao), RANKS),
-      situacao: buildFilterOptionValues(militares.map((militar) => militar.situacao), STATUSES),
+      companhia: buildFilterOptionValues(scopedMilitares.map((militar) => militar.companhia), COMPANIES),
+      postoGraduacao: buildFilterOptionValues(scopedMilitares.map((militar) => militar.postoGraduacao), RANKS),
+      situacao: buildFilterOptionValues(scopedMilitares.map((militar) => militar.situacao), STATUSES),
     }),
-    [militares],
+    [scopedMilitares],
   );
 
   const { data: customFields = [] } = useQuery<CustomFieldDefinition[]>({
@@ -526,14 +550,14 @@ export default function Militares() {
 
   const filteredMilitares = useMemo(
     () =>
-      [...militares]
+      [...scopedMilitares]
         .filter((militar) => {
           const matchesSearch =
             militar.nomeCompleto?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             militar.nomeGuerra?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             militar.cpf?.includes(searchTerm);
 
-          const matchesCompany = filterCompany === "all" || normalizeKey(militar.companhia) === normalizeKey(filterCompany);
+          const matchesCompany = filterCompany === "all" || normalizeAccessValue(militar.companhia) === normalizeAccessValue(filterCompany);
           const matchesRank = filterRank === "all" || militar.postoGraduacao === filterRank;
           const matchesStatus = filterStatus === "all" || militar.situacao === filterStatus;
 
@@ -547,18 +571,22 @@ export default function Militares() {
 
           return (a.nomeCompleto || "").localeCompare(b.nomeCompleto || "");
         }),
-    [militares, searchTerm, filterCompany, filterRank, filterStatus],
+    [scopedMilitares, searchTerm, filterCompany, filterRank, filterStatus],
   );
 
+  const cefDefaultCompany = selectedPef
+    ? "CEF"
+    : (filterCompany !== "all" ? filterCompany : (assignedCompany || "CEF"));
   const defaultCreateCompany =
     presetCompany ||
-    (isCefView ? "CEF" : null) ||
+    (isCefView ? cefDefaultCompany : null) ||
     (filterCompany !== "all" ? filterCompany : null) ||
     assignedCompany ||
     null;
 
-  const canCreateInCurrentScope = !!defaultCreateCompany && canManageCompany(defaultCreateCompany, "create");
-  const canDeleteVisibleRows = filteredMilitares.some((militar) => canManageCompany(militar.companhia, "delete"));
+  const defaultCreateSection = selectedPef || null;
+  const canCreateInCurrentScope = !!defaultCreateCompany && canManageCompany(defaultCreateCompany, "create", defaultCreateSection);
+  const canDeleteVisibleRows = filteredMilitares.some((militar) => canManageCompany(militar.companhia, "delete", militar.secaoFracao));
 
   const handleCellUpdate = (id: number, field: keyof MilitaryPersonnel | string, value: string) => {
     setSavingCell({ id, field: field as string });
@@ -650,6 +678,7 @@ export default function Militares() {
       nomeCompleto: "Novo Militar",
       postoGraduacao: "Sd 1ª Cl",
       companhia: defaultCreateCompany,
+      secaoFracao: defaultCreateSection || undefined,
       ord: filteredMilitares.length + 1,
     };
     createMutation.mutate(newMilitar);
@@ -666,7 +695,9 @@ export default function Militares() {
   const heading = presetCompany
     ? `Efetivo - ${presetCompany}`
     : isCefView
-      ? "Efetivo - CEF"
+      ? selectedPef
+        ? `Efetivo - CEF / ${selectedPef}`
+        : "Efetivo - CEF"
       : "Efetivo Total";
   const stickyHeaderClass = "sticky top-0 z-20 bg-background/95 shadow-[inset_0_-1px_0_hsl(var(--border))] backdrop-blur supports-[backdrop-filter]:bg-background/90";
 
@@ -851,8 +882,8 @@ export default function Militares() {
               </TableRow>
             ) : (
               filteredMilitares.map((militar) => {
-                const canEditRow = canManageCompany(militar.companhia, "edit");
-                const canDeleteRow = canManageCompany(militar.companhia, "delete");
+                const canEditRow = canManageCompany(militar.companhia, "edit", militar.secaoFracao);
+                const canDeleteRow = canManageCompany(militar.companhia, "delete", militar.secaoFracao);
 
                 return (
                 <TableRow key={militar.id} data-testid={`row-militar-${militar.id}`}>
@@ -1118,7 +1149,7 @@ export default function Militares() {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <div>
-          Mostrando {filteredMilitares.length} de {militares.length} militares
+          Mostrando {filteredMilitares.length} de {scopedMilitares.length} militares
         </div>
         {isManager && (
           <div className="flex items-center gap-2">

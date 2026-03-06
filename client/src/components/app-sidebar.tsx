@@ -1,4 +1,5 @@
-import { Home, Users, Building2, BarChart3, Settings } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Home, Users, Building2, BarChart3, Settings, ChevronDown } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -7,16 +8,22 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { getInitials } from "@/lib/utils";
 import logoUrl from "@assets/LOGO 7º BIS_1761200936316.png";
+import { PEF_SECTIONS } from "@shared/schema";
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -45,9 +52,14 @@ export function AppSidebar() {
     { title: "2ª Cia", company: "2ª CIA" },
     { title: "3ª Cia", company: "3ª CIA" },
     { title: "CCAp", company: "CCAP" },
-    { title: "CEF", special: "cef" },
+  ];
+  const companyTabsTail = [
     { title: "B Adm", company: "B ADM" },
   ];
+  const cefSubsections = PEF_SECTIONS.map((title, index) => ({
+    title,
+    pef: index + 1,
+  }));
 
   const reportItem = {
     title: "Relatórios",
@@ -56,6 +68,17 @@ export function AppSidebar() {
   };
 
   const getCompanyUrl = (company: string) => `/militares?view=cia&companhia=${encodeURIComponent(company)}`;
+  const getCefUrl = (pef?: number) => pef ? `/militares?view=cef&pef=${pef}` : "/militares?view=cef";
+  const queryString = location.split("?")[1] || "";
+  const cefParams = new URLSearchParams(queryString);
+  const isCefRoute = cefParams.get("view") === "cef";
+  const [cefOpen, setCefOpen] = useState(isCefRoute);
+
+  useEffect(() => {
+    if (isCefRoute) {
+      setCefOpen(true);
+    }
+  }, [isCefRoute]);
 
   const adminItems = [
     {
@@ -102,9 +125,54 @@ export function AppSidebar() {
               ))}
 
               {companyTabs.map((item) => {
-                const url = item.special === "cef"
-                  ? "/militares?view=cef"
-                  : getCompanyUrl(item.company!);
+                const url = getCompanyUrl(item.company!);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild isActive={location === url}>
+                      <Link href={url} data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
+                        <Users className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+
+              <Collapsible open={cefOpen} onOpenChange={setCefOpen} className="group/collapsible">
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isCefRoute}>
+                    <Link href={getCefUrl()} data-testid="link-cef" onClick={() => setCefOpen(true)}>
+                      <Users className="h-4 w-4" />
+                      <span>CEF</span>
+                    </Link>
+                  </SidebarMenuButton>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuAction showOnHover>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${cefOpen ? "rotate-180" : ""}`} />
+                    </SidebarMenuAction>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {cefSubsections.map((sub) => {
+                        const url = getCefUrl(sub.pef);
+                        return (
+                          <SidebarMenuSubItem key={sub.pef}>
+                            <SidebarMenuSubButton asChild isActive={location === url}>
+                              <Link href={url} data-testid={`link-pef-${sub.pef}`}>
+                                <Users className="h-4 w-4" />
+                                <span>{sub.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        );
+                      })}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+
+              {companyTabsTail.map((item) => {
+                const url = getCompanyUrl(item.company!);
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={location === url}>

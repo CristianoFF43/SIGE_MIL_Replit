@@ -1,4 +1,4 @@
-import { DEFAULT_PERMISSIONS, type AccessMeta, type AccessRole, type Permission } from "./schema";
+import { DEFAULT_PERMISSIONS, PEF_SECTIONS, type AccessMeta, type AccessRole, type Permission } from "./schema";
 
 export const LOCAL_DEFAULT_PERMISSIONS: Record<AccessRole, Permission> = {
   user: {
@@ -39,6 +39,16 @@ export function normalizeAccessValue(value?: string | null): string {
 
 export function isSameCompany(left?: string | null, right?: string | null): boolean {
   return normalizeAccessValue(left) !== "" && normalizeAccessValue(left) === normalizeAccessValue(right);
+}
+
+export function isSameSection(left?: string | null, right?: string | null): boolean {
+  return normalizeAccessValue(left) !== "" && normalizeAccessValue(left) === normalizeAccessValue(right);
+}
+
+export function isPefSection(value?: string | null): boolean {
+  const normalized = normalizeAccessValue(value);
+  if (!normalized) return false;
+  return PEF_SECTIONS.some((section) => normalizeAccessValue(section) === normalized);
 }
 
 export function isS1Section(value?: string | null): boolean {

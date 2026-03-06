@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Building2, Users, Shield, GripVertical, RotateCcw } from "lucide-react";
 import type { MilitaryPersonnel, UserPreference } from "@shared/schema";
 import { COMPANIES } from "@shared/schema";
+import { isPefSection } from "@shared/accessControl";
 import {
   DndContext,
   closestCenter,
@@ -255,15 +256,7 @@ export default function Companhias() {
     if (militares.length === 0) return;
 
     // Identificar militares dos PEFs
-    const pefPersonnel = militares.filter((m) => {
-      const secao = m.secaoFracao?.toUpperCase() || "";
-      return secao.includes("1º PEF") ||
-        secao.includes("2º PEF") ||
-        secao.includes("3º PEF") ||
-        secao.includes("4º PEF") ||
-        secao.includes("5º PEF") ||
-        secao.includes("6º PEF");
-    });
+    const pefPersonnel = militares.filter((m) => isPefSection(m.secaoFracao));
 
     // Dados dos PEFs como um card único
     const pefData: CompanyData | null = pefPersonnel.length > 0 ? {

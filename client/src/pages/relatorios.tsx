@@ -223,7 +223,7 @@ export default function Relatorios() {
     return true;
   });
 
-  const exportPreviewMilitares = filteredMilitares.filter((militar) => canExportCompany(militar.companhia));
+  const exportPreviewMilitares = filteredMilitares.filter((militar) => canExportCompany(militar.companhia, militar.secaoFracao));
 
   // Preparar dados baseado na métrica selecionada
   const getChartDataForMetric = (selectedMetric: DataMetric) => {
