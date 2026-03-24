@@ -27,7 +27,7 @@ export function useAuth() {
 
   const { data: user, isLoading: userDataLoading, error: queryError } = useQuery<User>({
     queryKey: ["/api/auth/user"],
-    enabled: !!firebaseUser,
+    enabled: !!firebaseUser && !!idToken,
     retry: false,
   });
 
