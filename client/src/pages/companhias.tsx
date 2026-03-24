@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveApiUrl } from "@/lib/queryClient";
 import { militaryQuerySyncOptions, useMilitaryDataSync } from "@/lib/militarySync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -222,7 +223,7 @@ export default function Companhias() {
   // Save preference mutation
   const savePreferenceMutation = useMutation({
     mutationFn: async (cardOrder: string[]) => {
-      const response = await fetch("/api/preferences/companhias_card_order", {
+      const response = await fetch(resolveApiUrl("/api/preferences/companhias_card_order"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preferenceValue: cardOrder }),
@@ -238,7 +239,7 @@ export default function Companhias() {
   // Delete preference mutation (reset to default)
   const resetPreferenceMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/preferences/companhias_card_order", {
+      const response = await fetch(resolveApiUrl("/api/preferences/companhias_card_order"), {
         method: "DELETE",
       });
       if (!response.ok && response.status !== 204) throw new Error("Failed to reset preference");
@@ -400,3 +401,7 @@ export default function Companhias() {
     </div>
   );
 }
+
+
+
+

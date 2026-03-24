@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { signInWithGoogle, signInWithEmail, registerWithEmail } from "@/lib/firebase";
 import { Shield, Mail, Chrome, TestTube } from "lucide-react";
 import logoUrl from "@assets/LOGO 7º BIS_1761200936316.png";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveApiUrl } from "@/lib/queryClient";
 
 const isTestMode = import.meta.env.VITE_TEST_MODE === 'true';
 
@@ -165,7 +165,7 @@ export default function LoginPage() {
       const sub = `test-user-${Date.now()}`;
       const email = `testuser${Date.now()}@test.com`;
 
-      const response = await fetch('/api/test-login', {
+      const response = await fetch(resolveApiUrl('/api/test-login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,3 +374,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

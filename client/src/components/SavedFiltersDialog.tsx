@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, resolveApiUrl } from "@/lib/queryClient";
 import { useFilterContext } from "@/hooks/useFilterContext";
 import {
   Dialog,
@@ -55,7 +55,7 @@ export function SavedFiltersDialog({ children }: SavedFiltersDialogProps) {
   const { data: savedFilters = [], isLoading } = useQuery<SavedFilterGroup[]>({
     queryKey: ["/api/filters"],
     queryFn: async () => {
-      const response = await fetch("/api/filters", {
+      const response = await fetch(resolveApiUrl("/api/filters"), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -293,3 +293,5 @@ export function SavedFiltersDialog({ children }: SavedFiltersDialogProps) {
     </>
   );
 }
+
+

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase";
-import { setGlobalIdToken } from "@/lib/queryClient";
+import { resolveApiUrl, setGlobalIdToken } from "@/lib/queryClient";
 import { onIdTokenChanged, type User } from "firebase/auth";
 
 interface AuthContextType {
@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const checkTestSession = async () => {
       if (import.meta.env.VITE_TEST_MODE === 'true') {
         try {
-          const response = await fetch('/api/auth/user', {
+          const response = await fetch(resolveApiUrl('/api/auth/user'), {
             credentials: 'include',
           });
           
@@ -104,3 +104,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
+

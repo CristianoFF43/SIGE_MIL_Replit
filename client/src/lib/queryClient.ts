@@ -4,6 +4,14 @@ import { auth } from "@/lib/firebase";
 // Global token storage - updated by AuthContext
 let globalIdToken: string | null = null;
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+export function resolveApiUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) return url;
+  const normalized = url.startsWith("/") ? url : `/${url}`;
+  return API_BASE_URL ? `${API_BASE_URL}${normalized}` : normalized;
+}
+
 export function setGlobalIdToken(token: string | null) {
   console.log("[QUERY] Setting global token:", token ? `${token.substring(0, 20)}...` : "null");
   globalIdToken = token;
@@ -54,7 +62,8 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  console.log(`[API REQUEST] ${method} ${url}`);
+  const resolvedUrl = resolveApiUrl(url);
+  console.log(`[API REQUEST] ${method} ${resolvedUrl}`);
   const authHeaders = await getAuthHeaders();
   console.log("[API REQUEST] Headers:", Object.keys(authHeaders));
   
@@ -68,7 +77,7 @@ export async function apiRequest(
     ? (isFormData ? (data as FormData) : JSON.stringify(data))
     : undefined;
 
-  const res = await fetch(url, {
+  const res = await fetch(resolvedUrl, {
     method,
     headers,
     body,
@@ -89,7 +98,7 @@ export async function apiRequest(
           Authorization: `Bearer ${refreshed}`,
         };
 
-        const retry = await fetch(url, {
+        const retry = await fetch(resolvedUrl, {
           method,
           headers: retryHeaders,
           body,
@@ -119,7 +128,10 @@ export const getQueryFn: <T>(options: {
   async ({ queryKey }) => {
     const authHeaders = await getAuthHeaders();
     
-    const res = await fetch(queryKey.join("/") as string, {
+    const rawUrl = queryKey.join("/") as string;
+    const resolvedUrl = resolveApiUrl(rawUrl);
+
+    const res = await fetch(resolvedUrl, {
       headers: authHeaders,
       credentials: "include",
     });
@@ -131,7 +143,7 @@ export const getQueryFn: <T>(options: {
       try {
         const refreshed = await refreshIdToken();
         if (refreshed) {
-          const retry = await fetch(queryKey.join("/") as string, {
+          const retry = await fetch(resolvedUrl, {
             headers: { ...authHeaders, Authorization: `Bearer ${refreshed}` },
             credentials: "include",
           });
@@ -172,3 +184,4 @@ export const queryClient = new QueryClient({
     },
   },
 });
+

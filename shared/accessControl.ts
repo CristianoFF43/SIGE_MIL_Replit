@@ -52,7 +52,10 @@ export function isPefSection(value?: string | null): boolean {
 }
 
 export function isS1Section(value?: string | null): boolean {
-  return normalizeAccessValue(value) === "S1";
+  const normalized = normalizeAccessValue(value);
+  if (!normalized) return false;
+  // Accept "S1" and variants such as "S1/PEL...", but reject "S10", "S11", etc.
+  return /^S1(?!\d)/.test(normalized);
 }
 
 export function getAccessMeta(permissions?: Permission | null): AccessMeta {
@@ -93,3 +96,4 @@ export function withAccessMeta(
     },
   };
 }
+

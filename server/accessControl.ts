@@ -184,15 +184,20 @@ export function validateGlobalRoleEligibility(role: AccessRole, section?: string
   return isS1Section(section);
 }
 
-export async function ensureSingleGlobalAdministrator(
+const MAX_GLOBAL_ADMINISTRATORS = 10;
+
+export async function ensureGlobalAdministratorLimit(
   users: User[],
   targetRole: AccessRole,
   targetUserId?: string,
 ): Promise<void> {
   if (targetRole !== "administrator") return;
 
-  const existingAdmin = users.find((user) => user.role === "administrator" && user.id !== targetUserId);
-  if (existingAdmin) {
-    throw new Error("Já existe um administrador global no sistema");
+  const administratorsCount = users.filter(
+    (user) => user.role === "administrator" && user.id !== targetUserId,
+  ).length;
+  if (administratorsCount >= MAX_GLOBAL_ADMINISTRATORS) {
+    throw new Error(`Ja existem ${MAX_GLOBAL_ADMINISTRATORS} administradores globais no sistema`);
   }
 }
+

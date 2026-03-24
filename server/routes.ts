@@ -36,7 +36,7 @@ import {
   canManageUsersGlobally,
   canManageUsersLocally,
   canViewUsersGlobally,
-  ensureSingleGlobalAdministrator,
+  ensureGlobalAdministratorLimit,
   hasEffectivePermission,
   hasGlobalPermission,
   scopeUsersForActor,
@@ -307,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const users = await storage.getAllUsers();
-      await ensureSingleGlobalAdministrator(users, role, id);
+      await ensureGlobalAdministratorLimit(users, role, id);
 
       const target = users.find((user) => user.id === id);
       if (!target) {
@@ -348,7 +348,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const users = await storage.getAllUsers();
       const managedPayload = await buildManagedUserPayload(actor, validated.role, users, validated.permissions);
 
-      await ensureSingleGlobalAdministrator(users, managedPayload.role);
+      await ensureGlobalAdministratorLimit(users, managedPayload.role);
 
       const user = await storage.createUser({
         ...validated,
@@ -391,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestedPermissions = (validated.permissions as Permission | undefined) || (existingUser.permissions as Permission | undefined);
       const managedPayload = await buildManagedUserPayload(actor, requestedRole, users, requestedPermissions, existingUser);
 
-      await ensureSingleGlobalAdministrator(users, managedPayload.role, id);
+      await ensureGlobalAdministratorLimit(users, managedPayload.role, id);
 
       const user = await storage.updateUser(id, {
         ...validated,
@@ -1382,3 +1382,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
+

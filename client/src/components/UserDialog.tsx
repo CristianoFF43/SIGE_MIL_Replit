@@ -37,7 +37,7 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RANKS, DEFAULT_PERMISSIONS, type AccessMeta, type MilitaryPersonnel, type Permission, type User } from "@shared/schema";
-import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
+import { getAccessMeta, isS1Section, withAccessMeta } from "@shared/accessControl";
 
 const userFormSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -403,12 +403,12 @@ export function UserDialog({
                   <p
                     className={cn(
                       "text-sm",
-                      accessMeta.linkedMilitaryId && normalizeAccessValue(derivedSection) === "S1"
+                      accessMeta.linkedMilitaryId && isS1Section(derivedSection)
                         ? "text-emerald-600"
                         : "text-amber-600",
                     )}
                   >
-                    {accessMeta.linkedMilitaryId && normalizeAccessValue(derivedSection) === "S1"
+                    {accessMeta.linkedMilitaryId && isS1Section(derivedSection)
                       ? "O militar vinculado pertence ao S1 e pode receber perfil global elevado."
                       : "Perfis globais de gerente/administrador exigem militar vinculado ao S1."}
                   </p>
@@ -758,3 +758,4 @@ export function UserDialog({
     </Dialog>
   );
 }
+
