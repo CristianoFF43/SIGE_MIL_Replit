@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { MilitaryPersonnel, CustomFieldDefinition } from '@shared/schema';
+import type { MilitaryPersonnel, CustomFieldDefinition } from '../shared/schema.js';
 
 interface ExportFilters {
   companhia?: string;

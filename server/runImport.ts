@@ -1,5 +1,5 @@
 // Script temporário para executar importação de arquivo Excel do Google Drive
-import { importFromExcelFile, extractFileId } from './importFromExcel';
+import { importFromExcelFile, extractFileId } from './importFromExcel.js';
 
 const FILE_URL = 'https://docs.google.com/spreadsheets/d/1SsKGtgZwMX5UFFexM_MPNfd_M3iDqGij/edit?usp=sharing&ouid=115100256178953593994&rtpof=true&sd=true';
 

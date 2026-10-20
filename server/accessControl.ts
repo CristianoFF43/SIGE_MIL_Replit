@@ -1,5 +1,5 @@
-import { DEFAULT_PERMISSIONS, type AccessRole, type Permission, type User } from "@shared/schema";
-import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isPefSection, isS1Section, isSameCompany, isSameSection } from "@shared/accessControl";
+import { DEFAULT_PERMISSIONS, type AccessRole, type Permission, type User } from "../shared/schema.js";
+import { LOCAL_DEFAULT_PERMISSIONS, getAccessMeta, isPefSection, isS1Section, isSameCompany, isSameSection } from "../shared/accessControl.js";
 
 type PermissionSection = Exclude<keyof Permission, "__meta">;
 

@@ -21,7 +21,7 @@ import pg from 'pg';
 import ws from "ws";
 
 const { Pool: PgPool } = pg;
-import * as schema from "@shared/schema";
+import * as schema from "../shared/schema.js";
 
 neonConfig.webSocketConstructor = ws;
 

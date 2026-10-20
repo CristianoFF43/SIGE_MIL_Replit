@@ -30,9 +30,9 @@ if (result.error) {
   console.log('✅ Arquivo .env carregado com sucesso');
 }
 
-import { db } from "./db";
-import { users } from "@shared/schema";
-import { DEFAULT_PERMISSIONS } from "@shared/schema";
+import { db } from "./db.js";
+import { users } from "../shared/schema.js";
+import { DEFAULT_PERMISSIONS } from "../shared/schema.js";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 

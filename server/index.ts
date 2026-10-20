@@ -1,6 +1,6 @@
-import { createApp } from "./app";
-import { log } from "./vite";
-import { cleanupTempCustomField } from "./cleanupTemp";
+import { createApp } from "./app.js";
+import { log } from "./vite.js";
+import { cleanupTempCustomField } from "./cleanupTemp.js";
 
 (async () => {
   // Run cleanup before starting server

@@ -100,3 +100,8 @@ Arquivo de memoria do projeto. Ao final de cada sessao, registrar aqui as ativid
 - Tabela "Efetivo Total" foi auditada: correcoes de refresh apos edicao, normalizacao de valores vazios (nao exibir "Vazio" nem "-"), manutencao do cabecalho fixo e retorno da edicao inline por texto em todas as celulas.
 - Implementada sincronizacao automatica dos dados de militares entre "Efetivo Total", abas das Cias, Companhias, Relatorios e importacoes do Admin, com invalidacao global de queries e notificacao entre abas do navegador.
 - Busca de "Militar Vinculado" no seletor de Administracao passou a considerar apenas o campo "Nome de Guerra".
+
+### 2026-10-20
+- Login travava na tela inicial apos Google (toast "Login realizado" aparecia, mas o app voltava ao login). Supabase estava ativo; a causa era a funcao serverless da Vercel (`api/index.ts`) quebrando no boot com `ERR_MODULE_NOT_FOUND: Cannot find package '@shared/schema'` (FUNCTION_INVOCATION_FAILED em todas as rotas /api).
+- Correcao: imports do servidor trocados de alias `@shared/*` para caminhos relativos com extensao `.js` (o runtime Node ESM da Vercel nao resolve aliases do tsconfig nem imports sem extensao); `vite`/`vite.config`/`nanoid` passaram a ser importados so dentro de `setupVite` (dev); `serveStatic` nao roda quando `VERCEL` esta definido (o front e servido pelo static build).
+- Validado com `tsc`, `vite build` e simulacao local do runtime (transpilacao arquivo-a-arquivo + Node ESM): original reproduz o erro, corrigido responde 401 em /api/auth/user sem token.

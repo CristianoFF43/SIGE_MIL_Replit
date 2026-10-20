@@ -6,7 +6,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 
 if (!process.env.REPLIT_DOMAINS) {
   throw new Error("Environment variable REPLIT_DOMAINS not provided");
@@ -247,7 +247,7 @@ export async function userHasPermission(
   }
 
   // Fallback to role-based default permissions
-  const { DEFAULT_PERMISSIONS } = await import("@shared/schema");
+  const { DEFAULT_PERMISSIONS } = await import("../shared/schema.js");
   const defaultPerms = DEFAULT_PERMISSIONS[user.role] as any;
   if (defaultPerms && defaultPerms[section] && defaultPerms[section][action]) {
     return true;

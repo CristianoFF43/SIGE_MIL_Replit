@@ -1,5 +1,5 @@
-import { db } from "./db";
-import { militaryPersonnel, users } from "@shared/schema";
+import { db } from "./db.js";
+import { militaryPersonnel, users } from "../shared/schema.js";
 
 // Initial data from Google Sheets - parsed from the spreadsheet
 const initialData = [

@@ -20,11 +20,11 @@ import {
   type FilterTree,
   DEFAULT_PERMISSIONS,
   type AccessMeta,
-} from "@shared/schema";
-import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
-import { db } from "./db";
+} from "../shared/schema.js";
+import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "../shared/accessControl.js";
+import { db } from "./db.js";
 import { eq, ilike, or, and, sql, SQL } from "drizzle-orm";
-import { buildFilterPredicate } from "./filterBuilder";
+import { buildFilterPredicate } from "./filterBuilder.js";
 
 function normalizeEmail(value?: string | null): string {
   return value?.trim().toLowerCase() || "";

@@ -1,5 +1,5 @@
-import { db } from "./db";
-import { customFieldDefinitions } from "@shared/schema";
+import { db } from "./db.js";
+import { customFieldDefinitions } from "../shared/schema.js";
 import { inArray, sql } from "drizzle-orm";
 
 export async function cleanupTempCustomField() {

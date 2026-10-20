@@ -1,4 +1,4 @@
-import { DEFAULT_PERMISSIONS, PEF_SECTIONS, type AccessMeta, type AccessRole, type Permission } from "./schema";
+import { DEFAULT_PERMISSIONS, PEF_SECTIONS, type AccessMeta, type AccessRole, type Permission } from "./schema.js";
 
 export const LOCAL_DEFAULT_PERMISSIONS: Record<AccessRole, Permission> = {
   user: {

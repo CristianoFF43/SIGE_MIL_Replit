@@ -90,7 +90,7 @@ export async function createApp() {
     // Import initial data if needed (skip in production for faster startup)
     if (process.env.NODE_ENV === 'development' && process.env.IMPORT_INITIAL_DATA !== 'false') {
         try {
-            const { importInitialData } = await import("./importData");
+            const { importInitialData } = await import("./importData.js");
             await importInitialData();
         } catch (error) {
             console.error("Error importing initial data:", error);
@@ -112,7 +112,8 @@ export async function createApp() {
     // doesn't interfere with the other routes
     if (app.get("env") === "development") {
         await setupVite(app, server);
-    } else {
+    } else if (!process.env.VERCEL) {
+        // On Vercel the frontend is served by the static build; the function only handles /api
         serveStatic(app);
     }
 

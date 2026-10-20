@@ -24,8 +24,8 @@ import {
   type MilitaryPersonnel,
   type Permission,
   type User,
-} from "@shared/schema";
-import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "@shared/accessControl";
+} from "../shared/schema.js";
+import { getAccessMeta, normalizeAccessValue, withAccessMeta } from "../shared/accessControl.js";
 import { fromError } from "zod-validation-error";
 import { simpleFiltersToTree } from "./filterBuilder.js";
 import {
@@ -908,14 +908,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Tenta primeiro como arquivo Excel (Google Drive)
       try {
-        const { importFromExcelFile, extractFileId } = await import('./importFromExcel');
+        const { importFromExcelFile, extractFileId } = await import('./importFromExcel.js');
         const fileId = extractFileId(spreadsheetUrl);
         const result = await importFromExcelFile(fileId);
         return res.json(result);
       } catch (excelError: any) {
         // Se falhar, tenta como Google Sheets nativo
         console.log('Not an Excel file, trying Google Sheets...');
-        const { importFromGoogleSheets, extractSpreadsheetId } = await import('./googleSheetsImport');
+        const { importFromGoogleSheets, extractSpreadsheetId } = await import('./googleSheetsImport.js');
         const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
         const result = await importFromGoogleSheets(spreadsheetId, sheetName || 'Sheet1');
         return res.json(result);
@@ -942,7 +942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[UPLOAD IMPORT] Received file: ${req.file.originalname} (${req.file.mimetype}) size=${req.file.size}`);
 
-      const { importFromBuffer } = await import('./importFromExcel');
+      const { importFromBuffer } = await import('./importFromExcel.js');
       const result = await importFromBuffer(req.file.buffer);
       return res.json(result);
     } catch (error: any) {
@@ -978,7 +978,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[LOCAL IMPORT] Reading file: ${candidatePath}`);
       const buffer = await fs.readFile(candidatePath);
 
-      const { importFromBuffer } = await import('./importFromExcel');
+      const { importFromBuffer } = await import('./importFromExcel.js');
       const result = await importFromBuffer(buffer);
       return res.json(result);
     } catch (error: any) {
@@ -1073,7 +1073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customFields = await storage.getAllCustomFieldDefinitions();
 
       // Gera arquivo Excel
-      const { generateExcel } = await import('./exportService');
+      const { generateExcel } = await import('./exportService.js');
       const excelBuffer = generateExcel(militares, customFields, columns as string[]);
 
       // Define headers para download
@@ -1173,7 +1173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const customFields = await storage.getAllCustomFieldDefinitions();
 
       // Gera arquivo PDF
-      const { generatePDF } = await import('./exportService');
+      const { generatePDF } = await import('./exportService.js');
       const localTime = req.query.localTime as string | undefined;
       const pdfBuffer = generatePDF(militares, customFields, columns as string[], localTime);
 
@@ -1339,7 +1339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete sessions table if exists
       let sessionsDeleted = 0;
       try {
-        const { db } = await import('./db');
+        const { db } = await import('./db.js');
         const { sql } = await import('drizzle-orm');
         // Attempt to delete sessions (ignore if table missing)
         const result: any = await db.execute(sql`DELETE FROM sessions`);
@@ -1349,7 +1349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete app users (cascade will remove related preferences/filters)
       let usersDeleted = 0;
       try {
-        const { db } = await import('./db');
+        const { db } = await import('./db.js');
         const { sql } = await import('drizzle-orm');
         const result: any = await db.execute(sql`DELETE FROM users`);
         usersDeleted = (result.rowCount || 0);

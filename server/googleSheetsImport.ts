@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
-import { db } from "./db";
-import { militaryPersonnel, customFieldDefinitions } from "@shared/schema";
-import { validateAndNormalizeCustomFields } from "./storage";
+import { db } from "./db.js";
+import { militaryPersonnel, customFieldDefinitions } from "../shared/schema.js";
+import { validateAndNormalizeCustomFields } from "./storage.js";
 
 async function getGoogleSheetsClient() {
   // Use Firebase Admin credentials which are already set up for the project

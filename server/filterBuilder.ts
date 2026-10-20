@@ -1,6 +1,6 @@
 import { and, or, eq, ne, inArray, notInArray, like, ilike, gt, lt, gte, lte, SQL, sql } from 'drizzle-orm';
-import { militaryPersonnel, filterComparators } from '@shared/schema';
-import type { FilterTree, FilterCondition, FilterGroup } from '@shared/schema';
+import { militaryPersonnel, filterComparators } from '../shared/schema.js';
+import type { FilterTree, FilterCondition, FilterGroup } from '../shared/schema.js';
 
 /**
  * Mapeia nomes de campos para colunas do Drizzle

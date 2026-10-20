@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
 import * as XLSX from 'xlsx';
-import { db } from "./db";
-import { militaryPersonnel, customFieldDefinitions, type CustomFieldDefinition } from "@shared/schema";
-import { validateAndNormalizeCustomFields } from "./storage";
+import { db } from "./db.js";
+import { militaryPersonnel, customFieldDefinitions, type CustomFieldDefinition } from "../shared/schema.js";
+import { validateAndNormalizeCustomFields } from "./storage.js";
 
 async function getGoogleDriveClient() {
   // Use Firebase Admin credentials which are already set up for the project
