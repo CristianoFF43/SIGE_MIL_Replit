@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react";
 import { useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -31,7 +31,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -55,6 +54,53 @@ import { buildFilterOptions, buildFilterOptionValues } from "@/lib/filter-option
 import { COMPANIES, RANKS, STATUSES, PEF_SECTIONS } from "@shared/schema";
 import { isPefSection, isSameSection, normalizeAccessValue } from "@shared/accessControl";
 import type { MilitaryPersonnel, FilterTree, InsertMilitaryPersonnel, CustomFieldDefinition } from "@shared/schema";
+
+// Barra de rolagem horizontal extra acima da tabela, sincronizada com a da própria tabela
+function useSyncedTopScrollbar(tableRendered: boolean) {
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const [hasOverflow, setHasOverflow] = useState(false);
+
+  useEffect(() => {
+    const container = tableScrollRef.current;
+    if (!container) return;
+    const measure = () => {
+      setScrollWidth(container.scrollWidth);
+      setHasOverflow(container.scrollWidth > container.clientWidth + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    if (container.firstElementChild) observer.observe(container.firstElementChild);
+    return () => observer.disconnect();
+  }, [tableRendered]);
+
+  // Enquanto o usuário rola uma das barras, os eventos "eco" da outra são ignorados,
+  // evitando que uma posição atrasada sobrescreva a atual durante rolagens rápidas.
+  const activeSourceRef = useRef<"top" | "table" | null>(null);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const syncFrom = useCallback((source: "top" | "table") => {
+    const top = topScrollRef.current;
+    const table = tableScrollRef.current;
+    if (!top || !table) return;
+    if (activeSourceRef.current && activeSourceRef.current !== source) return;
+
+    activeSourceRef.current = source;
+    clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = setTimeout(() => {
+      activeSourceRef.current = null;
+    }, 150);
+
+    const [from, to] = source === "top" ? [top, table] : [table, top];
+    if (to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft;
+  }, []);
+
+  useEffect(() => () => clearTimeout(releaseTimerRef.current), []);
+
+  return { tableScrollRef, topScrollRef, scrollWidth, hasOverflow, syncFrom };
+}
 
 // Ordenação hierárquica militar (do mais alto ao mais baixo)
 const RANK_ORDER = [
@@ -350,6 +396,9 @@ export default function Militares() {
     enabled: isAuthenticated,
     ...militaryQuerySyncOptions,
   });
+
+  const { tableScrollRef, topScrollRef, scrollWidth, hasOverflow, syncFrom } =
+    useSyncedTopScrollbar(!authLoading && !isLoading);
 
   const scopedMilitares = useMemo(() => {
     if (!isCefView) return militares;
@@ -848,8 +897,26 @@ export default function Militares() {
         </div>
       )}
 
-      <div className="rounded-md border overflow-x-auto">
-        <Table className="min-w-max [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+      <div className="space-y-1">
+        {/* Barra horizontal superior, espelhando a rolagem da tabela */}
+        <div
+          ref={topScrollRef}
+          onScroll={() => syncFrom("top")}
+          className={hasOverflow ? "overflow-x-auto overflow-y-hidden rounded-md border" : "hidden"}
+          aria-hidden="true"
+          data-testid="scrollbar-top"
+        >
+          <div style={{ width: scrollWidth, height: 1 }} />
+        </div>
+
+        {/* A tabela rola dentro da própria área (altura da tela), para o cabeçalho sticky funcionar */}
+        <div
+          ref={tableScrollRef}
+          onScroll={() => syncFrom("table")}
+          className="relative rounded-md border overflow-auto max-h-[calc(100vh-12rem)]"
+          data-testid="table-scroll-container"
+        >
+        <table className="w-full caption-bottom text-sm min-w-max [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <TableHeader>
             <TableRow>
               <TableHead className={`${stickyHeaderClass} w-[60px]`}>Ord</TableHead>
@@ -1144,7 +1211,8 @@ export default function Militares() {
               })
             )}
           </TableBody>
-        </Table>
+        </table>
+        </div>
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
